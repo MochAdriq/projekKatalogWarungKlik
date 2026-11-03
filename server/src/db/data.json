@@ -1,0 +1,151 @@
+{
+  "settings": {
+    "storeName": "WarungKlik",
+    "tagline": "Pesan Kuliner & Minuman Favorit Cepat & Praktis",
+    "address": "Jl. Hang Tuah Kuliner Blok A No. 12, Jakarta",
+    "phone": "6281234567890",
+    "currency": "Rp",
+    "activeWhatsApp": true
+  },
+  "admin": {
+    "id": "admin_warungklik_1",
+    "name": "Admin WarungKlik",
+    "email": "admin@warungklik.com",
+    "password": "$2b$10$mOkY1.V1rzWHdZvp7vgKLO4.ZnwzjU3YEeooLV8uw.QZr7DAAqKjW",
+    "passwordHashed": true
+  },
+  "categories": [
+    {
+      "id": "cat_fb_1",
+      "name": "Makanan Utama",
+      "slug": "makanan-utama"
+    },
+    {
+      "id": "cat_fb_2",
+      "name": "Camilan & Kudapan",
+      "slug": "camilan-kudapan"
+    },
+    {
+      "id": "cat_fb_3",
+      "name": "Minuman & Kopi",
+      "slug": "minuman-kopi"
+    },
+    {
+      "id": "cat_fb_4",
+      "name": "Paket Hemat Kombo",
+      "slug": "paket-hemat-kombo"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod_fb_1",
+      "name": "Nasi Goreng Spesial Rempah",
+      "categoryId": "cat_fb_1",
+      "categoryName": "Makanan Utama",
+      "price": 28000,
+      "stockStatus": 25,
+      "description": "Nasi goreng racikan rempah pilihan beraroma harum, disajikan dengan telur mata sapi, suwiran ayam, acar, dan kerupuk renyah.",
+      "image": "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T08:00:00Z"
+    },
+    {
+      "id": "prod_fb_2",
+      "name": "Ayam Bakar Madu Pedas Gurih",
+      "categoryId": "cat_fb_1",
+      "categoryName": "Makanan Utama",
+      "price": 35000,
+      "stockStatus": 15,
+      "description": "Ayam bakar bumbu kecap madu lezat dengan baluran pedas manis gurih, disajikan lengkap dengan sambal terasi dan lalapan segar.",
+      "image": "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T08:15:00Z"
+    },
+    {
+      "id": "prod_fb_3",
+      "name": "Mie Nyemek Khas Jawa Telur Bebek",
+      "categoryId": "cat_fb_1",
+      "categoryName": "Makanan Utama",
+      "price": 26000,
+      "stockStatus": 20,
+      "description": "Mie kenyal berkuah kental gurih dengan orak-arik telur bebek, sayuran segar, irisan bakso, dan taburan bawang merah goreng.",
+      "image": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T08:30:00Z"
+    },
+    {
+      "id": "prod_fb_4",
+      "name": "Es Kopi Susu Gula Aren Barista",
+      "categoryId": "cat_fb_3",
+      "categoryName": "Minuman & Kopi",
+      "price": 18000,
+      "stockStatus": 50,
+      "description": "Perpaduan espresso kopi house blend pilihan, susu segar lembut creamy, dan manis legit alami sirup gula aren murni.",
+      "image": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T08:45:00Z"
+    },
+    {
+      "id": "prod_fb_5",
+      "name": "Matcha Latte Creamy Ice",
+      "categoryId": "cat_fb_3",
+      "categoryName": "Minuman & Kopi",
+      "price": 22000,
+      "stockStatus": 30,
+      "description": "Seduhan bubuk matcha murni dengan susu segar creamy, manis seimbang dan sensasi kesegaran khas green tea.",
+      "image": "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T09:00:00Z"
+    },
+    {
+      "id": "prod_fb_6",
+      "name": "Es Lemon Tea Sereh Segar",
+      "categoryId": "cat_fb_3",
+      "categoryName": "Minuman & Kopi",
+      "price": 14000,
+      "stockStatus": 40,
+      "description": "Teh seduh wangi berpadu perasan jeruk lemon asli dan aroma serai segar yang melepas dahaga seketika.",
+      "image": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T09:10:00Z"
+    },
+    {
+      "id": "prod_fb_7",
+      "name": "Dimsum Mentai Panggang (Isi 4)",
+      "categoryId": "cat_fb_2",
+      "categoryName": "Camilan & Kudapan",
+      "price": 24000,
+      "stockStatus": 18,
+      "description": "Dimsum kukus lembut dengan isian daging ayam dan udang, dilapisi saus mentai gurih creamy lalu di-torch smoky.",
+      "image": "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T09:20:00Z"
+    },
+    {
+      "id": "prod_fb_8",
+      "name": "Pisang Goreng Crispy Keju Cokelat",
+      "categoryId": "cat_fb_2",
+      "categoryName": "Camilan & Kudapan",
+      "price": 16000,
+      "stockStatus": 25,
+      "description": "Pisang kepok manis berbalut tepung kriuk renyah tahan lama, dilumuri cokelat lumer dan taburan parutan keju cheddar melimpah.",
+      "image": "https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T09:30:00Z"
+    },
+    {
+      "id": "prod_fb_9",
+      "name": "Paket Kenyang: Nasi Goreng + Es Kopi Susu",
+      "categoryId": "cat_fb_4",
+      "categoryName": "Paket Hemat Kombo",
+      "price": 40000,
+      "stockStatus": 15,
+      "description": "Paket kombo hemat: 1 Porsi Nasi Goreng Spesial Rempah ditambah 1 Cup Es Kopi Susu Gula Aren.",
+      "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-31T09:40:00Z"
+    },
+    {
+      "id": "prod-1793604994931",
+      "name": "adriq",
+      "categoryId": "2",
+      "price": 24000,
+      "stockStatus": "Tersedia",
+      "description": "Dimsum kukus lembut dengan isian daging ayam dan udang, dilapisi saus mentai gurih creamy lalu di-torch smoky.",
+      "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-11-02T07:36:34.931Z",
+      "updatedAt": "2026-11-02T07:36:34.931Z"
+    }
+  ]
+}
