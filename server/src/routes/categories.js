@@ -4,15 +4,19 @@ import { authenticateToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get(`/`, (req, res) => {
-  const categories = db.getCategories();
-  res.json({
-    success: true,
-    data: categories,
-  });
+router.get("/", async (req, res) => {
+  try {
+    const categories = await db.getCategories();
+    res.json({
+      success: true,
+      data: categories,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-router.post(`/`, authenticateToken, (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({
@@ -21,76 +25,43 @@ router.post(`/`, authenticateToken, (req, res) => {
     });
   }
 
-  const existing = db
-    .getCategories()
-    .find((cat) => cat.name.toLowerCase() === name.toLowerCase());
-  if (existing) {
-    return res.status(400).json({
-      success: false,
-      message: "Category already exists",
-    });
-  }
-
   try {
-    const newCat = db.addCategory(name.trim());
+    const categories = await db.getCategories();
+    const existing = categories.find((cat) => cat.name.toLowerCase() === name.trim().toLowerCase());
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Category already exists",
+      });
+    }
+
+    const newCat = await db.addCategory(name.trim());
     res.status(201).json({
       success: true,
       data: newCat,
       message: "Category added successfully",
     });
   } catch (err) {
-    res.status(400).json({
+    res.status(500).json({
       success: false,
       message: err.message,
     });
   }
 });
 
-router.put(`/:id`, authenticateToken, (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name } = req.body;
-
-  if (!name || !name.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: "Category name is required",
-    });
-  }
 
   try {
-    const updated = db.updateCategory(id, name.trim());
-    if (!updated) {
-      return res.status(404).json({
+    const products = await db.getProducts({ categoryId: id });
+    if (products.length > 0) {
+      return res.status(400).json({
         success: false,
-        message: "Category not found",
+        message: "Cannot delete category with existing products",
       });
     }
-    res.json({
-      success: true,
-      data: updated,
-      message: "Category updated successfully",
-    });
-  } catch (err) {
-    res.status(400).json({
-      success: false,
-      message: err.message,
-    });
-  }
-});
 
-router.delete(`/:id`, authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const products = db.getProducts({ categoryId: id });
-
-  if (products.length > 0) {
-    return res.status(400).json({
-      success: false,
-      message: "Cannot delete category with existing products",
-    });
-  }
-
-  try {
-    const deleted = db.deleteCategory(id);
+    const deleted = await db.deleteCategory(id);
     if (!deleted) {
       return res.status(404).json({
         success: false,
@@ -102,7 +73,7 @@ router.delete(`/:id`, authenticateToken, (req, res) => {
       message: "Category deleted successfully",
     });
   } catch (err) {
-    res.status(400).json({
+    res.status(500).json({
       success: false,
       message: err.message,
     });

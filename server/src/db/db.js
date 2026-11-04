@@ -1,616 +1,417 @@
+import mysql from "mysql2/promise";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const SQLITE_FILE = path.join(__dirname, "warungklik.sqlite");
 const DATA_FILE = path.join(__dirname, "data.json");
 
-// Dynamic import for node:sqlite (available on Node v22.5.0+)
-let DatabaseSync = null;
-try {
-  const sqlite = await import("node:sqlite");
-  DatabaseSync = sqlite.DatabaseSync;
-} catch {
-  DatabaseSync = null;
-}
+// Figma default initial data
+const INITIAL_CATEGORIES = [
+  { id: "cat_bowls", name: "Bowls", slug: "bowls" },
+  { id: "cat_salads", name: "Salads", slug: "salads" },
+  { id: "cat_warm", name: "Warm plates", slug: "warm-plates" },
+  { id: "cat_breakfast", name: "Breakfast", slug: "breakfast" },
+  { id: "cat_drinks", name: "Cold pressed", slug: "cold-pressed" },
+];
 
-// -------------------------------------------------------------
-// SQLite Implementation (Used when node:sqlite is available)
-// -------------------------------------------------------------
-class SqliteDatabase {
+const INITIAL_PRODUCTS = [
+  {
+    id: "prod_harvest",
+    name: "Harvest bowl",
+    categoryId: "cat_bowls",
+    price: 25000,
+    stockStatus: "Tersedia",
+    description: "Fluffy quinoa, creamy avocado & roasted sweet potato, finished with our lemon-tahini dressing.",
+    image: "/uploads/food-1.jpg",
+  },
+  {
+    id: "prod_daily_salad",
+    name: "Daily greens salad",
+    categoryId: "cat_salads",
+    price: 22000,
+    stockStatus: "Tersedia",
+    description: "Farm-fresh mixed greens, toasted pumpkin seeds, crisp cucumber, and cold-pressed olive vinaigrette.",
+    image: "/uploads/food-2.jpg",
+  },
+  {
+    id: "prod_green_goddess",
+    name: "Green goddess grain bowl",
+    categoryId: "cat_bowls",
+    price: 28000,
+    stockStatus: "Tersedia",
+    description: "Steamed edamame, broccoli florets, ribboned zucchini, wild rice, and green herb drizzle.",
+    image: "/uploads/food-3.jpg",
+  },
+  {
+    id: "prod_roasted_root",
+    name: "Roasted root plate",
+    categoryId: "cat_warm",
+    price: 30000,
+    stockStatus: "Tersedia",
+    description: "Spiced chickpeas, roasted baby carrots, charred greens, and warm sourdough slice.",
+    image: "/uploads/food-4.jpg",
+  },
+  {
+    id: "prod_acai_bowl",
+    name: "Sunrise acai bowl",
+    categoryId: "cat_breakfast",
+    price: 24000,
+    stockStatus: "Tersedia",
+    description: "Organic acai blend, fresh wild berries, crunchy artisan granola, and toasted coconut flakes.",
+    image: "/uploads/food-5.jpg",
+  },
+  {
+    id: "prod_detox_juice",
+    name: "Pure green detox juice",
+    categoryId: "cat_drinks",
+    price: 18000,
+    stockStatus: "Tersedia",
+    description: "Green apple, kale, celery, fresh ginger root, and Persian lime.",
+    image: "/uploads/food-6.jpg",
+  },
+  {
+    id: "prod_avo_toast",
+    name: "Avocado sourdough toast",
+    categoryId: "cat_breakfast",
+    price: 20000,
+    stockStatus: "Tersedia",
+    description: "Smashed avocado, heirloom cherry tomatoes, sea salt flakes on toasted country loaf.",
+    image: "/uploads/food-7.jpg",
+  },
+  {
+    id: "prod_mushroom_grain",
+    name: "Wild mushroom grain skillet",
+    categoryId: "cat_warm",
+    price: 29000,
+    stockStatus: "Tersedia",
+    description: "Pan-roasted oyster mushrooms, garlic herbed farro, and crispy shallots.",
+    image: "/uploads/food-8.jpg",
+  },
+];
+
+class MysqlDatabase {
   constructor() {
-    this.db = new DatabaseSync(SQLITE_FILE);
-    this.initTables();
-    this.seedInitialData();
+    this.pool = null;
+    this.initialized = false;
+    this.initPromise = this.init();
   }
 
-  initTables() {
-    this.db.exec("PRAGMA foreign_keys = ON;");
+  async init() {
+    try {
+      const host = process.env.DB_HOST || "localhost";
+      const port = Number(process.env.DB_PORT) || 3306;
+      const user = process.env.DB_USER || "root";
+      const password = process.env.DB_PASSWORD || "";
+      const dbName = process.env.DB_NAME || "warungklik_db";
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        slug TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      // 1. Create database if it doesn't exist
+      const initialConn = await mysql.createConnection({ host, port, user, password });
+      await initialConn.query(
+        `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
       );
-    `);
+      await initialConn.end();
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-        price INTEGER NOT NULL,
-        stock_status TEXT NOT NULL DEFAULT 'Tersedia',
-        description TEXT,
-        image TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      // 2. Create connection pool to the database
+      this.pool = mysql.createPool({
+        host,
+        port,
+        user,
+        password,
+        database: dbName,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+      });
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-    `);
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS admins (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_products_cat ON products(category_id);
-      CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock_status);
-    `);
-  }
-
-  seedInitialData() {
-    const seedData = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-
-    const existingSettings = this.db
-      .prepare("SELECT COUNT(*) AS count FROM settings")
-      .get();
-    if (existingSettings.count === 0) {
-      const insertSetting = this.db.prepare(
-        "INSERT INTO settings (key, value) VALUES (?, ?)",
-      );
-      for (const [key, value] of Object.entries(seedData.settings)) {
-        insertSetting.run(key, String(value));
-      }
-    }
-
-    const existingAdmin = this.db
-      .prepare("SELECT COUNT(*) AS count FROM admins")
-      .get();
-    if (existingAdmin.count === 0) {
-      const hashedPassword = bcrypt.hashSync(seedData.admin.password, 10);
-      this.db
-        .prepare(
-          "INSERT INTO admins (id, name, email, password) VALUES (?, ?, ?, ?)",
-        )
-        .run(
-          seedData.admin.id,
-          seedData.admin.name,
-          seedData.admin.email,
-          hashedPassword,
+      // 3. Create tables
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS categories (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(100) NOT NULL UNIQUE,
+          slug VARCHAR(100) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-    }
-
-    const existingCategories = this.db
-      .prepare("SELECT COUNT(*) AS count FROM categories")
-      .get();
-    if (existingCategories.count === 0) {
-      const insertCat = this.db.prepare(
-        "INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)",
-      );
-      for (const category of seedData.categories) {
-        insertCat.run(category.id, category.name, category.slug);
-      }
-    }
-
-    const existingProducts = this.db
-      .prepare("SELECT COUNT(*) AS count FROM products")
-      .get();
-    if (existingProducts.count === 0) {
-      const insertProduct = this.db.prepare(`
-        INSERT INTO products (id, name, category_id, price, stock_status, description, image)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
 
-      for (const product of seedData.products) {
-        const stockStatus =
-          typeof product.stockStatus === "number"
-            ? product.stockStatus > 0
-              ? "Tersedia"
-              : "Habis"
-            : product.stockStatus || "Tersedia";
-        insertProduct.run(
-          product.id,
-          product.name,
-          product.categoryId,
-          product.price,
-          stockStatus,
-          product.description,
-          product.image,
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS products (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(150) NOT NULL,
+          category_id VARCHAR(50) NOT NULL,
+          price INT NOT NULL,
+          stock_status VARCHAR(50) NOT NULL DEFAULT 'Tersedia',
+          description TEXT,
+          image VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+        );
+      `);
+
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS settings (
+          setting_key VARCHAR(50) PRIMARY KEY,
+          setting_value TEXT NOT NULL
+        );
+      `);
+
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS admins (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          email VARCHAR(100) NOT NULL UNIQUE,
+          password VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // 4. Seed initial data
+      await this.seedInitialData();
+      this.initialized = true;
+      console.log(`[MySQL] Terhubung sukses ke database '${dbName}' di XAMPP!`);
+    } catch (err) {
+      console.error("[MySQL Error] Gagal inisialisasi database MySQL:", err.message);
+    }
+  }
+
+  async seedInitialData() {
+    // Seed Settings
+    const [settingsRows] = await this.pool.query("SELECT COUNT(*) AS count FROM settings");
+    if (settingsRows[0].count === 0) {
+      const defaultSettings = {
+        storeName: "Daily greens",
+        tagline: "Freshly made. Thoughtfully sourced. To your door.",
+        address: "Sudirman Central, Jakarta",
+        phone: "0895338977816",
+        currency: "Rp",
+        activeWhatsApp: "true",
+      };
+      for (const [key, value] of Object.entries(defaultSettings)) {
+        await this.pool.query(
+          "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+          [key, String(value), String(value)]
+        );
+      }
+    }
+
+    // Seed Admin
+    const [adminRows] = await this.pool.query("SELECT COUNT(*) AS count FROM admins");
+    if (adminRows[0].count === 0) {
+      const hashedPassword = bcrypt.hashSync("admin123", 10);
+      await this.pool.query(
+        "INSERT INTO admins (id, name, email, password) VALUES (?, ?, ?, ?)",
+        ["admin_1", "Admin Daily Greens", "admin@warungklik.com", hashedPassword]
+      );
+    }
+
+    // Seed Categories
+    const [catRows] = await this.pool.query("SELECT COUNT(*) AS count FROM categories");
+    if (catRows[0].count === 0) {
+      for (const cat of INITIAL_CATEGORIES) {
+        await this.pool.query(
+          "INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)",
+          [cat.id, cat.name, cat.slug]
+        );
+      }
+    }
+
+    // Seed Products
+    const [prodRows] = await this.pool.query("SELECT COUNT(*) AS count FROM products");
+    if (prodRows[0].count === 0) {
+      for (const p of INITIAL_PRODUCTS) {
+        await this.pool.query(
+          "INSERT INTO products (id, name, category_id, price, stock_status, description, image) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [p.id, p.name, p.categoryId, p.price, p.stockStatus, p.description, p.image]
         );
       }
     }
   }
 
-  getSettings() {
-    const rows = this.db.prepare("SELECT key, value FROM settings").all();
-    const settings = {};
-    for (const row of rows) {
-      settings[row.key] = row.value;
+  async ensureReady() {
+    if (!this.initialized) {
+      await this.initPromise;
     }
-    return settings;
   }
 
-  getStoreSettings() {
-    return this.getSettings();
-  }
-
-  updateSettings(newSettings) {
-    const upsert = this.db.prepare(`
-      INSERT INTO settings (key, value) VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-
-    for (const [key, val] of Object.entries(newSettings)) {
-      upsert.run(key, String(val));
-    }
-    return this.getSettings();
-  }
-
-  updateStoreSettings(newSettings) {
-    return this.updateSettings(newSettings);
-  }
-
-  getAdmin() {
-    return this.db
-      .prepare("SELECT id, name, email, password FROM admins LIMIT 1")
-      .get();
-  }
-
-  getCategories() {
-    return this.db
-      .prepare(
-        `
-      SELECT 
-        c.id, 
-        c.name, 
-        c.slug, 
-        c.created_at AS createdAt,
-        COUNT(p.id) AS productCount
-      FROM categories c
-      LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id
-      ORDER BY c.created_at ASC
-    `,
-      )
-      .all();
-  }
-
-  getCategoryById(id) {
-    return this.db
-      .prepare("SELECT id, name, slug FROM categories WHERE id = ?")
-      .get(id);
-  }
-
-  addCategory(name) {
-    const id = `cat-${Date.now()}`;
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    this.db
-      .prepare("INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)")
-      .run(id, name, slug);
-    return { id, name, slug, productCount: 0 };
-  }
-
-  updateCategory(id, name) {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const res = this.db
-      .prepare("UPDATE categories SET name = ?, slug = ? WHERE id = ?")
-      .run(name, slug, id);
-    if (res.changes === 0) return null;
-    return { id, name, slug };
-  }
-
-  deleteCategory(id) {
-    const res = this.db.prepare("DELETE FROM categories WHERE id = ?").run(id);
-    return res.changes > 0;
-  }
-
-  getProducts(filters = {}) {
+  // --- Products ---
+  async getProducts({ categoryId, search, stockStatus } = {}) {
+    await this.ensureReady();
     let sql = `
-      SELECT 
-        p.id, 
-        p.name, 
-        p.category_id AS categoryId, 
-        c.name AS categoryName, 
-        p.price, 
-        p.stock_status AS stockStatus, 
-        p.description, 
-        p.image, 
-        p.created_at AS createdAt,
-        p.updated_at AS updatedAt
+      SELECT p.id, p.id AS _id, p.name, p.category_id AS categoryId, c.name AS categoryName,
+             p.price, p.stock_status AS stockStatus, p.description, p.image AS imageUrl, p.image AS imageurl,
+             p.created_at AS createdAt, p.updated_at AS updatedAt
       FROM products p
-      JOIN categories c ON p.category_id = c.id
+      LEFT JOIN categories c ON p.category_id = c.id
       WHERE 1=1
     `;
     const params = [];
 
-    if (filters.categoryId) {
+    if (categoryId) {
       sql += " AND p.category_id = ?";
-      params.push(filters.categoryId);
+      params.push(categoryId);
     }
-
-    if (filters.stockStatus) {
+    if (search) {
+      sql += " AND (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ?)";
+      const pattern = `%${search}%`;
+      params.push(pattern, pattern, pattern);
+    }
+    if (stockStatus) {
       sql += " AND p.stock_status = ?";
-      params.push(filters.stockStatus);
-    }
-
-    if (filters.search) {
-      sql += " AND (LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ?)";
-      const queryPattern = `%${filters.search.toLowerCase()}%`;
-      params.push(queryPattern, queryPattern);
+      params.push(stockStatus);
     }
 
     sql += " ORDER BY p.created_at DESC";
-
-    return this.db.prepare(sql).all(...params);
+    const [rows] = await this.pool.query(sql, params);
+    return rows;
   }
 
-  getProductById(id) {
-    return this.db
-      .prepare(
-        `
-      SELECT 
-        p.id, 
-        p.name, 
-        p.category_id AS categoryId, 
-        c.name AS categoryName, 
-        p.price, 
-        p.stock_status AS stockStatus, 
-        p.description, 
-        p.image, 
-        p.created_at AS createdAt,
-        p.updated_at AS updatedAt
+  async getProductById(id) {
+    await this.ensureReady();
+    const sql = `
+      SELECT p.id, p.id AS _id, p.name, p.category_id AS categoryId, c.name AS categoryName,
+             p.price, p.stock_status AS stockStatus, p.description, p.image AS imageUrl, p.image AS imageurl,
+             p.created_at AS createdAt, p.updated_at AS updatedAt
       FROM products p
-      JOIN categories c ON p.category_id = c.id
+      LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.id = ?
-    `,
-      )
-      .get(id);
+    `;
+    const [rows] = await this.pool.query(sql, [id]);
+    return rows[0] || null;
   }
 
-  addProduct(productData) {
-    const id = `prod-${Date.now()}`;
-    const price = Number(productData.price) || 0;
-    const stockStatus = productData.stockStatus || "Tersedia";
-    const description = productData.description || "";
-    const image =
-      productData.image ||
-      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80";
+  async addProduct(data) {
+    await this.ensureReady();
+    const id = `prod_${Date.now()}`;
+    const name = data.name;
+    const categoryId = data.categoryId;
+    const price = Number(data.price) || 0;
+    const stockStatus = data.stockStatus || "Tersedia";
+    const description = data.description || "";
+    const image = data.image || data.imageurl || "/uploads/food-1.jpg";
 
-    this.db
-      .prepare(
-        `
-      INSERT INTO products (id, name, category_id, price, stock_status, description, image)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
-      )
-      .run(
-        id,
-        productData.name,
-        productData.categoryId,
-        price,
-        stockStatus,
-        description,
-        image,
-      );
-
-    return this.getProductById(id);
+    await this.pool.query(
+      "INSERT INTO products (id, name, category_id, price, stock_status, description, image) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, name, categoryId, price, stockStatus, description, image]
+    );
+    return await this.getProductById(id);
   }
 
-  updateProduct(id, productData) {
-    const current = this.getProductById(id);
-    if (!current) return null;
+  async updateProduct(id, data) {
+    await this.ensureReady();
+    const existing = await this.getProductById(id);
+    if (!existing) return null;
 
-    const name =
-      productData.name !== undefined ? productData.name : current.name;
-    const categoryId =
-      productData.categoryId !== undefined
-        ? productData.categoryId
-        : current.categoryId;
-    const price =
-      productData.price !== undefined
-        ? Number(productData.price)
-        : current.price;
-    const stockStatus =
-      productData.stockStatus !== undefined
-        ? productData.stockStatus
-        : current.stockStatus;
-    const description =
-      productData.description !== undefined
-        ? productData.description
-        : current.description;
-    const image =
-      productData.image !== undefined ? productData.image : current.image;
+    const name = data.name !== undefined ? data.name : existing.name;
+    const categoryId = data.categoryId !== undefined ? data.categoryId : existing.categoryId;
+    const price = data.price !== undefined ? Number(data.price) : existing.price;
+    const stockStatus = data.stockStatus !== undefined ? data.stockStatus : existing.stockStatus;
+    const description = data.description !== undefined ? data.description : existing.description;
+    const image = data.image !== undefined ? data.image : (data.imageurl !== undefined ? data.imageurl : existing.imageUrl);
 
-    this.db
-      .prepare(
-        `
-      UPDATE products 
-      SET name = ?, category_id = ?, price = ?, stock_status = ?, description = ?, image = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-      )
-      .run(name, categoryId, price, stockStatus, description, image, id);
-
-    return this.getProductById(id);
+    await this.pool.query(
+      "UPDATE products SET name = ?, category_id = ?, price = ?, stock_status = ?, description = ?, image = ? WHERE id = ?",
+      [name, categoryId, price, stockStatus, description, image, id]
+    );
+    return await this.getProductById(id);
   }
 
-  toggleStock(id) {
-    const product = this.getProductById(id);
+  async toggleStock(id) {
+    await this.ensureReady();
+    const product = await this.getProductById(id);
     if (!product) return null;
 
-    const newStock = product.stockStatus === "Tersedia" ? "Habis" : "Tersedia";
-    this.db
-      .prepare(
-        `
-      UPDATE products 
-      SET stock_status = ?, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `,
-      )
-      .run(newStock, id);
-
-    return this.getProductById(id);
+    const newStatus = product.stockStatus === "Tersedia" ? "Habis" : "Tersedia";
+    await this.pool.query("UPDATE products SET stock_status = ? WHERE id = ?", [newStatus, id]);
+    return await this.getProductById(id);
   }
 
-  deleteProduct(id) {
-    const res = this.db.prepare("DELETE FROM products WHERE id = ?").run(id);
-    return res.changes > 0;
-  }
-}
-
-// -------------------------------------------------------------
-// JSON Database Engine (Fallback for Node < 22 without node:sqlite)
-// -------------------------------------------------------------
-class JsonDatabase {
-  constructor() {
-    this.filePath = DATA_FILE;
-    this.data = this.loadData();
+  async deleteProduct(id) {
+    await this.ensureReady();
+    const [result] = await this.pool.query("DELETE FROM products WHERE id = ?", [id]);
+    return result.affectedRows > 0;
   }
 
-  loadData() {
-    try {
-      const content = fs.readFileSync(this.filePath, "utf8");
-      const parsed = JSON.parse(content);
-      if (parsed.admin && !parsed.admin.passwordHashed) {
-        parsed.admin.password = bcrypt.hashSync(parsed.admin.password, 10);
-        parsed.admin.passwordHashed = true;
-        this.saveData(parsed);
-      }
-      return parsed;
-    } catch {
-      return { settings: {}, admin: {}, categories: [], products: [] };
-    }
+  // --- Categories ---
+  async getCategories() {
+    await this.ensureReady();
+    const [rows] = await this.pool.query("SELECT id, id AS _id, name, slug FROM categories ORDER BY name ASC");
+    return rows;
   }
 
-  saveData(customData = null) {
-    const payload = customData || this.data;
-    fs.writeFileSync(this.filePath, JSON.stringify(payload, null, 2), "utf8");
+  async addCategory(name) {
+    await this.ensureReady();
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const id = `cat_${Date.now()}`;
+    await this.pool.query("INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)", [id, name, slug]);
+    return { id, _id: id, name, slug };
   }
 
-  getSettings() {
-    return this.data.settings || {};
+  async deleteCategory(id) {
+    await this.ensureReady();
+    const [result] = await this.pool.query("DELETE FROM categories WHERE id = ?", [id]);
+    return result.affectedRows > 0;
   }
 
-  getStoreSettings() {
-    return this.getSettings();
-  }
-
-  updateSettings(newSettings) {
-    this.data.settings = { ...this.data.settings, ...newSettings };
-    this.saveData();
-    return this.getSettings();
-  }
-
-  updateStoreSettings(newSettings) {
-    return this.updateSettings(newSettings);
-  }
-
-  getAdmin() {
-    return this.data.admin || null;
-  }
-
-  getCategories() {
-    const counts = {};
-    for (const p of this.data.products || []) {
-      counts[p.categoryId] = (counts[p.categoryId] || 0) + 1;
-    }
-    return (this.data.categories || []).map((c) => ({
-      ...c,
-      productCount: counts[c.id] || 0,
-      createdAt: c.createdAt || new Date().toISOString(),
-    }));
-  }
-
-  getCategoryById(id) {
-    return (this.data.categories || []).find((c) => c.id === id) || null;
-  }
-
-  addCategory(name) {
-    const id = `cat-${Date.now()}`;
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const newCat = { id, name, slug, createdAt: new Date().toISOString() };
-    this.data.categories.push(newCat);
-    this.saveData();
-    return { ...newCat, productCount: 0 };
-  }
-
-  updateCategory(id, name) {
-    const cat = this.getCategoryById(id);
-    if (!cat) return null;
-    cat.name = name;
-    cat.slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    this.saveData();
-    return cat;
-  }
-
-  deleteCategory(id) {
-    const initialLen = this.data.categories.length;
-    this.data.categories = this.data.categories.filter((c) => c.id !== id);
-    if (this.data.categories.length !== initialLen) {
-      this.saveData();
-      return true;
-    }
-    return false;
-  }
-
-  getProducts(filters = {}) {
-    const catMap = {};
-    for (const c of this.data.categories || []) {
-      catMap[c.id] = c.name;
-    }
-
-    let list = (this.data.products || []).map((p) => {
-      const stockStatus =
-        typeof p.stockStatus === "number"
-          ? p.stockStatus > 0
-            ? "Tersedia"
-            : "Habis"
-          : p.stockStatus || "Tersedia";
-      return {
-        id: p.id,
-        name: p.name,
-        categoryId: p.categoryId,
-        categoryName: catMap[p.categoryId] || p.categoryName || "Umum",
-        price: Number(p.price) || 0,
-        stockStatus,
-        description: p.description || "",
-        image:
-          p.image ||
-          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
-        createdAt: p.createdAt || new Date().toISOString(),
-        updatedAt: p.updatedAt || new Date().toISOString(),
-      };
-    });
-
-    if (filters.categoryId) {
-      list = list.filter((p) => p.categoryId === filters.categoryId);
-    }
-
-    if (filters.stockStatus) {
-      list = list.filter((p) => p.stockStatus === filters.stockStatus);
-    }
-
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q),
-      );
-    }
-
-    return list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-  }
-
-  getProductById(id) {
-    const list = this.getProducts();
-    return list.find((p) => p.id === id) || null;
-  }
-
-  addProduct(productData) {
-    const id = `prod-${Date.now()}`;
-    const newProd = {
-      id,
-      name: productData.name,
-      categoryId: productData.categoryId,
-      price: Number(productData.price) || 0,
-      stockStatus: productData.stockStatus || "Tersedia",
-      description: productData.description || "",
-      image:
-        productData.image ||
-        "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  // --- Store Settings ---
+  async getStoreSettings() {
+    await this.ensureReady();
+    const [rows] = await this.pool.query("SELECT setting_key, setting_value FROM settings");
+    const settings = {
+      storeName: "Daily greens",
+      tagline: "Freshly made. Thoughtfully sourced. To your door.",
+      address: "Sudirman Central, Jakarta",
+      phone: "0895338977816",
+      currency: "Rp",
+      activeWhatsApp: true,
     };
-    this.data.products.push(newProd);
-    this.saveData();
-    return this.getProductById(id);
+    rows.forEach((r) => {
+      if (r.setting_key === "activeWhatsApp") {
+        settings[r.setting_key] = r.setting_value === "true";
+      } else {
+        settings[r.setting_key] = r.setting_value;
+      }
+    });
+    return settings;
   }
 
-  updateProduct(id, productData) {
-    const prod = (this.data.products || []).find((p) => p.id === id);
-    if (!prod) return null;
-
-    if (productData.name !== undefined) prod.name = productData.name;
-    if (productData.categoryId !== undefined) prod.categoryId = productData.categoryId;
-    if (productData.price !== undefined) prod.price = Number(productData.price);
-    if (productData.stockStatus !== undefined) prod.stockStatus = productData.stockStatus;
-    if (productData.description !== undefined) prod.description = productData.description;
-    if (productData.image !== undefined) prod.image = productData.image;
-    prod.updatedAt = new Date().toISOString();
-
-    this.saveData();
-    return this.getProductById(id);
-  }
-
-  toggleStock(id) {
-    const prod = (this.data.products || []).find((p) => p.id === id);
-    if (!prod) return null;
-
-    const currentStatus =
-      typeof prod.stockStatus === "number"
-        ? prod.stockStatus > 0
-          ? "Tersedia"
-          : "Habis"
-        : prod.stockStatus || "Tersedia";
-
-    prod.stockStatus = currentStatus === "Tersedia" ? "Habis" : "Tersedia";
-    prod.updatedAt = new Date().toISOString();
-    this.saveData();
-    return this.getProductById(id);
-  }
-
-  deleteProduct(id) {
-    const initialLen = (this.data.products || []).length;
-    this.data.products = (this.data.products || []).filter((p) => p.id !== id);
-    if (this.data.products.length !== initialLen) {
-      this.saveData();
-      return true;
+  async updateStoreSettings(newSettings) {
+    await this.ensureReady();
+    for (const [key, value] of Object.entries(newSettings)) {
+      if (value !== undefined) {
+        await this.pool.query(
+          "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+          [key, String(value), String(value)]
+        );
+      }
     }
-    return false;
+    return await this.getStoreSettings();
+  }
+
+  // --- Admin Auth ---
+  async getAdmin() {
+    await this.ensureReady();
+    const [rows] = await this.pool.query("SELECT id, name, email, password FROM admins LIMIT 1");
+    return rows[0] || null;
+  }
+
+  async createAdmin({ name, email, password }) {
+    await this.ensureReady();
+    const id = `admin_${Date.now()}`;
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await this.pool.query("INSERT INTO admins (id, name, email, password) VALUES (?, ?, ?, ?)", [
+      id,
+      name,
+      email,
+      hashedPassword,
+    ]);
+    return { id, name, email };
   }
 }
 
-// Export database instance
-export const db = DatabaseSync ? new SqliteDatabase() : new JsonDatabase();
+export const db = new MysqlDatabase();

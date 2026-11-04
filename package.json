@@ -4,6 +4,7 @@
   "description": "WarungKlik - Food & Beverage Catalog Platform",
   "private": true,
   "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "npm --prefix server run dev",
     "server:start": "npm --prefix server start",
     "client:dev": "npm --prefix client run dev",
@@ -11,5 +12,8 @@
   },
   "dependencies": {
     "vite": "^8.3.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
   }
 }

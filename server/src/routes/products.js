@@ -43,142 +43,164 @@ const upload = multer({
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  const categoryId = req.query.categoryId || req.query.categryId;
-  const { search, stockStatus } = req.query;
-  const products = db.getProducts({ categoryId, search, stockStatus });
-  res.json({
-    success: true,
-    count: products.length,
-    data: products,
-  });
+router.get("/", async (req, res) => {
+  try {
+    const categoryId = req.query.categoryId || req.query.categryId;
+    const { search, stockStatus } = req.query;
+    const products = await db.getProducts({ categoryId, search, stockStatus });
+    res.json({
+      success: true,
+      count: products.length,
+      data: products,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-router.get("/:id", (req, res) => {
-  const product = db.getProductById(req.params.id);
-  if (!product) {
-    return res.status(404).json({
-      success: false,
-      message: "Product not found",
+router.get("/:id", async (req, res) => {
+  try {
+    const product = await db.getProductById(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+    res.json({
+      success: true,
+      data: product,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-  res.json({
-    success: true,
-    data: product,
-  });
 });
 
-router.post("/", authenticateToken, upload.single("image"), (req, res) => {
-  const { name, price, stockStatus, categoryId, description, imageurl } =
-    req.body;
-  if (!name || !name.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: "Product name is required",
-    });
-  }
-  if (!categoryId) {
-    return res.status(400).json({
-      success: false,
-      message: "Category product is required",
-    });
-  }
-  if (price === undefined || isNaN(price) || Number(price) < 0) {
-    return res.status(400).json({
-      success: false,
-      message: "Price must be a positive number",
-    });
-  }
+router.post("/", authenticateToken, upload.single("image"), async (req, res) => {
+  try {
+    const { name, price, stockStatus, categoryId, description, imageurl } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Product name is required",
+      });
+    }
+    if (!categoryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Category product is required",
+      });
+    }
+    if (price === undefined || isNaN(price) || Number(price) < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Price must be a positive number",
+      });
+    }
 
-  let finalImage = imageurl;
-  if (req.file) {
-    finalImage = `/uploads/${req.file.filename}`;
+    let finalImage = imageurl;
+    if (req.file) {
+      finalImage = `/uploads/${req.file.filename}`;
+    }
+
+    const newProduct = await db.addProduct({
+      name: name.trim(),
+      categoryId,
+      price: parseFloat(price),
+      stockStatus: stockStatus || "Tersedia",
+      description: description ? description.trim() : "",
+      image: finalImage || "",
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newProduct,
+      message: "Product added successfully",
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const newProduct = db.addProduct({
-    name: name.trim(),
-    categoryId,
-    price: parseFloat(price),
-    stockStatus: stockStatus || "Tersedia",
-    description: description ? description.trim() : "",
-    image: finalImage || "",
-  });
-
-  res.status(201).json({
-    success: true,
-    data: newProduct,
-    message: "Product added successfully",
-  });
 });
 
-router.put("/:id", authenticateToken, upload.single("image"), (req, res) => {
-  const { id } = req.params;
-  const { name, price, stockStatus, categoryId, description, imageurl } =
-    req.body;
+router.put("/:id", authenticateToken, upload.single("image"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, price, stockStatus, categoryId, description, imageurl } = req.body;
 
-  const existing = db.getProductById(id);
-  if (!existing) {
-    return res.status(404).json({
-      success: false,
-      message: "Product not found",
+    const existing = await db.getProductById(id);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    const updatePayload = {};
+    if (name !== undefined) updatePayload.name = name.trim();
+    if (categoryId !== undefined) updatePayload.categoryId = categoryId;
+    if (price !== undefined) updatePayload.price = parseFloat(price);
+    if (stockStatus !== undefined) updatePayload.stockStatus = stockStatus;
+    if (description !== undefined) updatePayload.description = description.trim();
+
+    if (req.file) {
+      updatePayload.image = `/uploads/${req.file.filename}`;
+    } else if (imageurl !== undefined && imageurl.trim()) {
+      updatePayload.image = imageurl.trim();
+    }
+
+    const updated = await db.updateProduct(id, updatePayload);
+
+    res.json({
+      success: true,
+      data: updated,
+      message: "Product updated successfully",
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const updatePayload = {};
-  if (name !== undefined) updatePayload.name = name.trim();
-  if (categoryId !== undefined) updatePayload.categoryId = categoryId;
-  if (price !== undefined) updatePayload.price = parseFloat(price);
-  if (stockStatus !== undefined) updatePayload.stockStatus = stockStatus;
-  if (description !== undefined) updatePayload.description = description.trim();
-
-  if (req.file) {
-    updatePayload.image = `/uploads/${req.file.filename}`;
-  } else if (imageurl !== undefined && imageurl.trim()) {
-    updatePayload.image = imageurl.trim();
-  }
-
-  const updated = db.updateProduct(id, updatePayload);
-
-  res.json({
-    success: true,
-    data: updated,
-    message: "Product updated successfully",
-  });
 });
 
-router.patch("/:id", authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const updated = db.toggleStock(id);
+router.patch("/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await db.toggleStock(id);
 
-  if (!updated) {
-    return res.status(404).json({
-      success: false,
-      message: "Product not found",
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+      message: `Product stock status updated to ${updated.stockStatus}`,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  res.json({
-    success: true,
-    data: updated,
-    message: `Product stock status updated to ${updated.stockStatus}`,
-  });
 });
 
-router.delete("/:id", authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const deleted = db.deleteProduct(id);
+router.delete("/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await db.deleteProduct(id);
 
-  if (!deleted) {
-    return res.status(404).json({
-      success: false,
-      message: "Product not found",
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Product deleted successfully",
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  res.json({
-    success: true,
-    message: "Product deleted successfully",
-  });
 });
 
 export default router;

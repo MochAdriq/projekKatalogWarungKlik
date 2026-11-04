@@ -61,6 +61,18 @@ app.get("/", (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server WarungKlik is running on http://localhost:${port}`);
-});
+import { db } from "./db/db.js";
+
+const startServer = async () => {
+  try {
+    await db.ensureReady();
+  } catch (err) {
+    console.error("Gagal inisialisasi DB saat start:", err.message);
+  }
+
+  app.listen(port, () => {
+    console.log(`Server WarungKlik is running on http://localhost:${port}`);
+  });
+};
+
+startServer();
