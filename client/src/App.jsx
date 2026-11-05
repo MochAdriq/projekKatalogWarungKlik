@@ -248,9 +248,13 @@ export function App() {
           {/* 5. Catalog Footer (Figma: Catalog footer) */}
           <footer className="catalog-footer">
             <div className="container footer-content-row">
-              <span className="footer-brand-signature">
-                {storeSetting?.storeName || "Daily greens"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <img
+                  src="/logo-warungklik.png"
+                  alt="WarungKlik"
+                  className="footer-logo-img"
+                />
+              </div>
               <span className="footer-brand-promise">
                 Freshly made. Thoughtfully sourced. To your door.
               </span>

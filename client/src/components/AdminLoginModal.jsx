@@ -35,25 +35,20 @@ export function AdminLoginModal({ isOpen, onClose, onLogin }) {
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="admin-login-card" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <div
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <img
+              src="/favicon-warungklik.png"
+              alt="WarungKlik"
               style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "var(--radius-sm)",
-                backgroundColor: "var(--primary-soft)",
-                color: "var(--primary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                width: "38px",
+                height: "38px",
+                objectFit: "contain",
               }}
-            >
-              <Store size={20} />
-            </div>
+            />
             <div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--text-main)" }}>Admin console</h3>
               <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Workspace access
+                WarungKlik Workspace
               </span>
             </div>
           </div>

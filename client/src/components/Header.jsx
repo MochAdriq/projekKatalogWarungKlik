@@ -16,14 +16,18 @@ export function Header({
       <div className="container header-container">
         {/* Left: Brand */}
         <div className="header-brand">
-          <span
-            className="brand-title"
+          <button
+            type="button"
+            className="brand-logo-btn"
             onClick={() => setIsAdminView(false)}
-            role="button"
-            tabIndex={0}
+            aria-label={brandName}
           >
-            {brandName}
-          </span>
+            <img
+              src="/logo-warungklik.png"
+              alt="WarungKlik"
+              className="brand-logo-img"
+            />
+          </button>
         </div>
 
         {/* Center: Destinations (Figma: Destinations) */}

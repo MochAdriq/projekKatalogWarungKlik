@@ -232,7 +232,13 @@ export function AdminDashboard({
       {/* Sidebar Navigation */}
       <aside className="admin-sidebar">
         <div className="admin-sidebar-top">
-          <h2 className="admin-console-brand">Admin Console</h2>
+          <div style={{ marginBottom: "1.15rem" }}>
+            <img
+              src="/logo-warungklik.png"
+              alt="WarungKlik Admin Console"
+              style={{ height: "34px", width: "auto", display: "block" }}
+            />
+          </div>
 
           <div className="workspace-badge-selector">
             <div
