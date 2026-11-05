@@ -1,15 +1,24 @@
 import React from "react";
-import { Compass, Heart, Clock, ShoppingBag, User } from "./Icons.jsx";
+import { Compass, Heart, Clock, ShoppingBag, User, Store } from "./Icons.jsx";
 
 export function Header({
   storeSetting,
   isAdminView,
   setIsAdminView,
+  activeNavTab = "explore",
+  setActiveNavTab,
+  bagCount = 0,
+  favoritesCount = 0,
+  onOpenBag,
   adminUser,
   onOpenLogin,
-  onLogout,
 }) {
   const brandName = storeSetting?.storeName || "Daily greens";
+
+  const handleNavClick = (tab) => {
+    setIsAdminView(false);
+    if (setActiveNavTab) setActiveNavTab(tab);
+  };
 
   return (
     <header className="site-header">
@@ -19,7 +28,7 @@ export function Header({
           <button
             type="button"
             className="brand-logo-btn"
-            onClick={() => setIsAdminView(false)}
+            onClick={() => handleNavClick("explore")}
             aria-label={brandName}
           >
             <img
@@ -34,30 +43,32 @@ export function Header({
         <nav className="header-destinations" aria-label="Main Destinations">
           <button
             type="button"
-            className="nav-destination-item active"
-            onClick={() => setIsAdminView(false)}
+            className={`nav-destination-item ${!isAdminView && activeNavTab === "explore" ? "active" : ""}`}
+            onClick={() => handleNavClick("explore")}
           >
             <Compass size={17} />
             <span>Explore</span>
-            <span className="active-nav-indicator" />
+            {!isAdminView && activeNavTab === "explore" && <span className="active-nav-indicator" />}
           </button>
 
           <button
             type="button"
-            className="nav-destination-item"
-            onClick={() => alert("Fitur Favorites segera hadir!")}
+            className={`nav-destination-item ${!isAdminView && activeNavTab === "favorites" ? "active" : ""}`}
+            onClick={() => handleNavClick("favorites")}
           >
             <Heart size={17} />
-            <span>Favorites</span>
+            <span>Favorites{favoritesCount > 0 ? ` (${favoritesCount})` : ""}</span>
+            {!isAdminView && activeNavTab === "favorites" && <span className="active-nav-indicator" />}
           </button>
 
           <button
             type="button"
-            className="nav-destination-item"
-            onClick={() => alert("Fitur Orders segera hadir!")}
+            className={`nav-destination-item ${!isAdminView && activeNavTab === "orders" ? "active" : ""}`}
+            onClick={() => handleNavClick("orders")}
           >
             <Clock size={17} />
             <span>Orders</span>
+            {!isAdminView && activeNavTab === "orders" && <span className="active-nav-indicator" />}
           </button>
         </nav>
 
@@ -66,29 +77,42 @@ export function Header({
           <button
             type="button"
             className="my-bag-button"
-            onClick={() => alert("Keranjang belanja Anda")}
+            onClick={onOpenBag}
             aria-label="Buka keranjang belanja"
           >
             <ShoppingBag size={18} />
-            <span>My bag</span>
+            <span>My bag{bagCount > 0 ? ` (${bagCount})` : ""}</span>
           </button>
+
+          {adminUser?.role === "admin" && (
+            <button
+              type="button"
+              className="category-chip-btn"
+              onClick={() => setIsAdminView(!isAdminView)}
+              style={{ padding: "0.45rem 0.85rem", fontSize: "0.8125rem" }}
+              title="Buka Admin Console"
+            >
+              <Store size={15} />
+              <span>{isAdminView ? "Katalog" : "Admin"}</span>
+            </button>
+          )}
 
           {adminUser ? (
             <button
               type="button"
               className="profile-avatar-btn"
-              onClick={() => setIsAdminView(!isAdminView)}
-              title={isAdminView ? "Kembali ke Katalog" : "Buka Admin Console"}
+              onClick={onOpenLogin}
+              title={`Akun: ${adminUser.name}`}
             >
-              {adminUser.name ? adminUser.name.slice(0, 2).toUpperCase() : "AD"}
+              {adminUser.name ? adminUser.name.slice(0, 2).toUpperCase() : "US"}
             </button>
           ) : (
             <button
               type="button"
               className="profile-avatar-btn"
               onClick={onOpenLogin}
-              title="Masuk Admin Console"
-              aria-label="Masuk Admin"
+              title="Masuk / Daftar Akun"
+              aria-label="Masuk atau Daftar Akun"
             >
               <User size={18} />
             </button>

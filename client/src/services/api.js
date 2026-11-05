@@ -179,7 +179,7 @@ export const fetchStoreSetting = async () => {
   }
 };
 
-// Auth
+// Auth (Supports both Customer and Admin)
 export const loginAdmin = async (email, password) => {
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -191,6 +191,32 @@ export const loginAdmin = async (email, password) => {
   } catch (err) {
     return { success: false, message: "Koneksi ke sistem belum aktif. Pastikan server sudah berjalan." };
   }
+};
+
+export const registerUser = async (payload) => {
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch (err) {
+    return { success: false, message: "Gagal mendaftarkan akun. Pastikan server berjalan." };
+  }
+};
+
+export const updateUserProfile = async (payload) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
 };
 
 export const fetchAdminProfile = async () => {
@@ -205,6 +231,105 @@ export const fetchAdminProfile = async () => {
   } catch {
     return null;
   }
+};
+
+// Favorites API
+export const fetchFavorites = async () => {
+  const token = getAuthToken();
+  if (!token) return { success: true, data: [] };
+  try {
+    const res = await fetch(`${API_BASE}/auth/favorites`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { success: true, data: [] };
+    return await res.json();
+  } catch {
+    return { success: true, data: [] };
+  }
+};
+
+export const toggleFavoriteProduct = async (productId) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/favorites/${productId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return await res.json();
+};
+
+// Orders API
+export const createOrder = async (orderPayload) => {
+  const token = getAuthToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/auth/orders`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(orderPayload),
+  });
+  return await res.json();
+};
+
+export const fetchMyOrders = async () => {
+  const token = getAuthToken();
+  if (!token) return { success: true, data: [] };
+  try {
+    const res = await fetch(`${API_BASE}/auth/orders/my`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { success: true, data: [] };
+    return await res.json();
+  } catch {
+    return { success: true, data: [] };
+  }
+};
+
+export const fetchAllOrders = async () => {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE}/auth/orders/all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await res.json();
+  } catch {
+    return { success: false, data: [] };
+  }
+};
+
+export const updateOrderStatus = async (orderId, status) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/orders/${orderId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  return await res.json();
+};
+
+// Admin Users Management API
+export const fetchAllUsers = async () => {
+  const token = getAuthToken();
+  try {
+    const res = await fetch(`${API_BASE}/auth/users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await res.json();
+  } catch {
+    return { success: false, data: [] };
+  }
+};
+
+export const deleteUserAccount = async (userId) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return await res.json();
 };
 
 // CRUD Products with File Upload (FormData) Support

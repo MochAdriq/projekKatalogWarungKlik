@@ -171,6 +171,44 @@ class MysqlDatabase {
         );
       `);
 
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          email VARCHAR(100) NOT NULL UNIQUE,
+          password VARCHAR(255) NOT NULL,
+          phone VARCHAR(30) DEFAULT '',
+          address TEXT,
+          role VARCHAR(20) NOT NULL DEFAULT 'customer',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS favorites (
+          user_id VARCHAR(50) NOT NULL,
+          product_id VARCHAR(50) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, product_id),
+          FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+      `);
+
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id VARCHAR(50) PRIMARY KEY,
+          user_id VARCHAR(50) DEFAULT NULL,
+          customer_name VARCHAR(100) NOT NULL,
+          customer_phone VARCHAR(30) DEFAULT '',
+          customer_address TEXT,
+          items_json LONGTEXT NOT NULL,
+          total_price INT NOT NULL DEFAULT 0,
+          notes TEXT,
+          status VARCHAR(40) NOT NULL DEFAULT 'Menunggu Konfirmasi',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
       // 4. Seed initial data
       await this.seedInitialData();
       this.initialized = true;
@@ -393,11 +431,11 @@ class MysqlDatabase {
     return await this.getStoreSettings();
   }
 
-  // --- Admin Auth ---
+  // --- Admin & User Auth ---
   async getAdmin() {
     await this.ensureReady();
     const [rows] = await this.pool.query("SELECT id, name, email, password FROM admins LIMIT 1");
-    return rows[0] || null;
+    return rows[0] ? { ...rows[0], role: "admin" } : null;
   }
 
   async createAdmin({ name, email, password }) {
@@ -410,7 +448,201 @@ class MysqlDatabase {
       email,
       hashedPassword,
     ]);
-    return { id, name, email };
+    return { id, name, email, role: "admin" };
+  }
+
+  async getUserByEmail(email) {
+    await this.ensureReady();
+    const cleanEmail = email.trim().toLowerCase();
+    // 1. Check admins table first
+    const [adminRows] = await this.pool.query(
+      "SELECT id, name, email, password, created_at AS createdAt FROM admins WHERE LOWER(email) = ? LIMIT 1",
+      [cleanEmail]
+    );
+    if (adminRows[0]) {
+      return {
+        ...adminRows[0],
+        phone: "",
+        address: "",
+        role: "admin",
+      };
+    }
+
+    // 2. Check users table
+    const [userRows] = await this.pool.query(
+      "SELECT id, name, email, password, phone, address, role, created_at AS createdAt FROM users WHERE LOWER(email) = ? LIMIT 1",
+      [cleanEmail]
+    );
+    return userRows[0] || null;
+  }
+
+  async getUserById(id) {
+    await this.ensureReady();
+    if (String(id).startsWith("admin_")) {
+      const [adminRows] = await this.pool.query(
+        "SELECT id, name, email, created_at AS createdAt FROM admins WHERE id = ? LIMIT 1",
+        [id]
+      );
+      if (adminRows[0]) {
+        return { ...adminRows[0], phone: "", address: "", role: "admin" };
+      }
+    }
+
+    const [userRows] = await this.pool.query(
+      "SELECT id, name, email, phone, address, role, created_at AS createdAt FROM users WHERE id = ? LIMIT 1",
+      [id]
+    );
+    return userRows[0] || null;
+  }
+
+  async createUser({ name, email, password, phone = "", address = "", role = "customer" }) {
+    await this.ensureReady();
+    const id = `user_${Date.now()}`;
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await this.pool.query(
+      "INSERT INTO users (id, name, email, password, phone, address, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, name.trim(), email.trim().toLowerCase(), hashedPassword, phone.trim(), address.trim(), role]
+    );
+    return await this.getUserById(id);
+  }
+
+  async updateUserProfile(id, { name, phone, address }) {
+    await this.ensureReady();
+    const existing = await this.getUserById(id);
+    if (!existing) return null;
+    const nextName = name !== undefined ? name.trim() : existing.name;
+    const nextPhone = phone !== undefined ? phone.trim() : existing.phone || "";
+    const nextAddress = address !== undefined ? address.trim() : existing.address || "";
+
+    await this.pool.query(
+      "UPDATE users SET name = ?, phone = ?, address = ? WHERE id = ?",
+      [nextName, nextPhone, nextAddress, id]
+    );
+    return await this.getUserById(id);
+  }
+
+  async getAllUsers() {
+    await this.ensureReady();
+    const [rows] = await this.pool.query(
+      "SELECT id, name, email, phone, address, role, created_at AS createdAt FROM users ORDER BY created_at DESC"
+    );
+    return rows;
+  }
+
+  async deleteUser(id) {
+    await this.ensureReady();
+    await this.pool.query("DELETE FROM favorites WHERE user_id = ?", [id]);
+    const [res] = await this.pool.query("DELETE FROM users WHERE id = ?", [id]);
+    return res.affectedRows > 0;
+  }
+
+  // --- Favorites ---
+  async getUserFavorites(userId) {
+    await this.ensureReady();
+    const [rows] = await this.pool.query(
+      `SELECT p.id, p.id AS _id, p.name, p.category_id AS categoryId, c.name AS categoryName,
+              p.price, p.stock_status AS stockStatus, p.description, p.image AS imageUrl, p.image AS imageurl
+       FROM favorites f
+       INNER JOIN products p ON f.product_id = p.id
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE f.user_id = ?
+       ORDER BY f.created_at DESC`,
+      [userId]
+    );
+    return rows;
+  }
+
+  async toggleFavorite(userId, productId) {
+    await this.ensureReady();
+    const [existing] = await this.pool.query(
+      "SELECT 1 FROM favorites WHERE user_id = ? AND product_id = ?",
+      [userId, productId]
+    );
+    if (existing.length > 0) {
+      await this.pool.query("DELETE FROM favorites WHERE user_id = ? AND product_id = ?", [
+        userId,
+        productId,
+      ]);
+      return { favorited: false };
+    } else {
+      await this.pool.query("INSERT INTO favorites (user_id, product_id) VALUES (?, ?)", [
+        userId,
+        productId,
+      ]);
+      return { favorited: true };
+    }
+  }
+
+  // --- Orders ---
+  async createOrder({
+    userId = null,
+    customerName,
+    customerPhone = "",
+    customerAddress = "",
+    items = [],
+    totalPrice = 0,
+    notes = "",
+  }) {
+    await this.ensureReady();
+    const id = `ORD-${Date.now().toString().slice(-6)}`;
+    const itemsJson = JSON.stringify(items);
+    await this.pool.query(
+      `INSERT INTO orders (id, user_id, customer_name, customer_phone, customer_address, items_json, total_price, notes, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Menunggu Konfirmasi')`,
+      [id, userId, customerName, customerPhone, customerAddress, itemsJson, Number(totalPrice) || 0, notes]
+    );
+    return await this.getOrderById(id);
+  }
+
+  async getOrderById(id) {
+    await this.ensureReady();
+    const [rows] = await this.pool.query(
+      `SELECT id, user_id AS userId, customer_name AS customerName, customer_phone AS customerPhone,
+              customer_address AS customerAddress, items_json AS itemsJson, total_price AS totalPrice,
+              notes, status, created_at AS createdAt
+       FROM orders WHERE id = ?`,
+      [id]
+    );
+    if (!rows[0]) return null;
+    return {
+      ...rows[0],
+      items: JSON.parse(rows[0].itemsJson || "[]"),
+    };
+  }
+
+  async getUserOrders(userId) {
+    await this.ensureReady();
+    const [rows] = await this.pool.query(
+      `SELECT id, user_id AS userId, customer_name AS customerName, customer_phone AS customerPhone,
+              customer_address AS customerAddress, items_json AS itemsJson, total_price AS totalPrice,
+              notes, status, created_at AS createdAt
+       FROM orders WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId]
+    );
+    return rows.map((r) => ({
+      ...r,
+      items: JSON.parse(r.itemsJson || "[]"),
+    }));
+  }
+
+  async getAllOrders() {
+    await this.ensureReady();
+    const [rows] = await this.pool.query(
+      `SELECT id, user_id AS userId, customer_name AS customerName, customer_phone AS customerPhone,
+              customer_address AS customerAddress, items_json AS itemsJson, total_price AS totalPrice,
+              notes, status, created_at AS createdAt
+       FROM orders ORDER BY created_at DESC`
+    );
+    return rows.map((r) => ({
+      ...r,
+      items: JSON.parse(r.itemsJson || "[]"),
+    }));
+  }
+
+  async updateOrderStatus(id, status) {
+    await this.ensureReady();
+    await this.pool.query("UPDATE orders SET status = ? WHERE id = ?", [status, id]);
+    return await this.getOrderById(id);
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Store,
   Compass,
@@ -20,6 +20,10 @@ import {
   toggleProductStock,
   deleteCategory,
   getAuthToken,
+  fetchAllOrders,
+  updateOrderStatus,
+  fetchAllUsers,
+  deleteUserAccount,
 } from "../services/api.js";
 
 export function AdminDashboard({
@@ -31,10 +35,44 @@ export function AdminDashboard({
   onBackToCatalog,
   onLogout,
 }) {
-  const [activeTab, setActiveTab] = useState("products"); // 'products', 'categories'
+  const [activeTab, setActiveTab] = useState("products"); // 'products', 'categories', 'orders', 'users'
+  const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const loadAdminExtras = async () => {
+    try {
+      const [ordRes, usrRes] = await Promise.all([fetchAllOrders(), fetchAllUsers()]);
+      if (ordRes?.data) setOrders(ordRes.data);
+      if (usrRes?.data) setUsers(usrRes.data);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadAdminExtras();
+  }, []);
+
+  const handleChangeOrderStatus = async (orderId, nextStatus) => {
+    const res = await updateOrderStatus(orderId, nextStatus);
+    if (res?.success) {
+      setStatusMessage(`Status pesanan ${orderId} diubah menjadi '${nextStatus}'`);
+      loadAdminExtras();
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    const res = await deleteUserAccount(user.id);
+    if (res?.success) {
+      setStatusMessage(`Akun '${user.name}' berhasil dihapus.`);
+      loadAdminExtras();
+    } else {
+      setErrorMessage(res?.message || "Gagal menghapus user.");
+    }
+  };
 
   // Product Modal States
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -315,6 +353,54 @@ export function AdminDashboard({
                 </span>
               </button>
             </li>
+
+            <li>
+              <button
+                type="button"
+                className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveTab("orders");
+                  loadAdminExtras();
+                }}
+              >
+                <span>Pesanan Masuk</span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    padding: "0.1rem 0.5rem",
+                    borderRadius: "var(--radius-pill)",
+                    backgroundColor: activeTab === "orders" ? "var(--primary)" : "var(--bg-muted)",
+                    color: activeTab === "orders" ? "#fff" : "var(--text-secondary)",
+                  }}
+                >
+                  {orders.length}
+                </span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                className={`admin-nav-item ${activeTab === "users" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveTab("users");
+                  loadAdminExtras();
+                }}
+              >
+                <span>Daftar User</span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    padding: "0.1rem 0.5rem",
+                    borderRadius: "var(--radius-pill)",
+                    backgroundColor: activeTab === "users" ? "var(--primary)" : "var(--bg-muted)",
+                    color: activeTab === "users" ? "#fff" : "var(--text-secondary)",
+                  }}
+                >
+                  {users.length}
+                </span>
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -382,7 +468,13 @@ export function AdminDashboard({
           <span>Pengelola</span>
           <ChevronRight size={14} />
           <strong style={{ color: "var(--text-main)", fontWeight: 600 }}>
-            {activeTab === "products" ? "Daftar Menu" : "Kategori Menu"}
+            {activeTab === "products"
+              ? "Daftar Menu"
+              : activeTab === "categories"
+              ? "Kategori Menu"
+              : activeTab === "orders"
+              ? "Pesanan Masuk"
+              : "Daftar User"}
           </strong>
         </div>
 
@@ -411,7 +503,7 @@ export function AdminDashboard({
               onClick={() => setStatusMessage("")}
               style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
         )}
@@ -440,7 +532,7 @@ export function AdminDashboard({
               onClick={() => setErrorMessage("")}
               style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
         )}
@@ -572,7 +664,7 @@ export function AdminDashboard({
                               }}
                             >
                               <span>{isOutOfStock ? "Habis" : "Tersedia"}</span>
-                              <span style={{ fontSize: "10px", opacity: 0.7 }}>⇄</span>
+                              <RefreshCw size={11} style={{ opacity: 0.7 }} />
                             </button>
                           </td>
                           <td style={{ padding: "1rem", textAlign: "right" }}>
@@ -692,6 +784,175 @@ export function AdminDashboard({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* TAB 3: PESANAN MASUK */}
+        {activeTab === "orders" && (
+          <div
+            style={{
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "var(--radius-card)",
+              padding: "1.75rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <div>
+                <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)" }}>
+                  Daftar Pesanan Pelanggan
+                </h1>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
+                  Kelola status pesanan yang masuk dari pelanggan
+                </p>
+              </div>
+              <button type="button" className="category-chip-btn" onClick={loadAdminExtras}>
+                <RefreshCw size={14} />
+                <span>Segarkan</span>
+              </button>
+            </div>
+
+            {orders.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                Belum ada pesanan yang masuk.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>ID & Waktu</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Pelanggan</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Rincian Menu</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Total</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Status Pesanan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((ord) => (
+                      <tr key={ord.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                        <td style={{ padding: "1rem" }}>
+                          <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.id}</strong>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            {ord.createdAt ? new Date(ord.createdAt).toLocaleString("id-ID") : ""}
+                          </span>
+                        </td>
+                        <td style={{ padding: "1rem" }}>
+                          <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.customerName}</strong>
+                          {ord.customerPhone && (
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block" }}>
+                              WA: {ord.customerPhone}
+                            </span>
+                          )}
+                          {ord.customerAddress && (
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>
+                              {ord.customerAddress}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: "1rem" }}>
+                          {(ord.items || []).map((it, idx) => (
+                            <div key={idx} style={{ fontSize: "0.8125rem", color: "var(--text-main)" }}>
+                              {it.quantity}x {it.name}
+                            </div>
+                          ))}
+                          {ord.notes && (
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+                              Catatan: {ord.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: "1rem", fontWeight: 700, color: "var(--text-forest)" }}>
+                          {formatRupiah(ord.totalPrice)}
+                        </td>
+                        <td style={{ padding: "1rem" }}>
+                          <select
+                            className="figma-input"
+                            style={{ padding: "0.4rem 0.65rem", fontSize: "0.8125rem", width: "auto" }}
+                            value={ord.status}
+                            onChange={(e) => handleChangeOrderStatus(ord.id, e.target.value)}
+                          >
+                            <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
+                            <option value="Diproses">Diproses</option>
+                            <option value="Selesai">Selesai</option>
+                            <option value="Dibatalkan">Dibatalkan</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: DAFTAR USER */}
+        {activeTab === "users" && (
+          <div
+            style={{
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "var(--radius-card)",
+              padding: "1.75rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <div>
+                <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)" }}>
+                  Daftar Akun Pembeli Terdaftar
+                </h1>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
+                  Total {users.length} pengguna terdaftar di sistem WarungKlik
+                </p>
+              </div>
+              <button type="button" className="category-chip-btn" onClick={loadAdminExtras}>
+                <RefreshCw size={14} />
+                <span>Segarkan</span>
+              </button>
+            </div>
+
+            {users.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                Belum ada akun pembeli yang terdaftar.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Nama & Email</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>No. WhatsApp</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Alamat</th>
+                      <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", textAlign: "right" }}>Tindakan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                        <td style={{ padding: "1rem" }}>
+                          <strong style={{ display: "block", color: "var(--text-main)" }}>{u.name}</strong>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{u.email}</span>
+                        </td>
+                        <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{u.phone || "-"}</td>
+                        <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{u.address || "-"}</td>
+                        <td style={{ padding: "1rem", textAlign: "right" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u)}
+                            className="category-chip-btn"
+                            style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem", color: "var(--danger)", borderColor: "#fecaca" }}
+                          >
+                            <Trash2 size={14} />
+                            <span>Hapus</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </main>

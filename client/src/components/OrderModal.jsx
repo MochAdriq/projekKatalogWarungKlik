@@ -1,10 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Plus, Minus, ShoppingBag } from "./Icons.jsx";
+import { createOrder } from "../services/api.js";
 
-export function OrderModal({ product, storeSetting, onClose }) {
+export function OrderModal({
+  product,
+  storeSetting,
+  currentUser,
+  onAddToBag,
+  onOrderCreated,
+  onClose,
+}) {
   const [quantity, setQuantity] = useState(1);
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [isOrdering, setIsOrdering] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setCustomerName(currentUser.name || "");
+      setCustomerPhone(currentUser.phone || "");
+      setCustomerAddress(currentUser.address || "");
+    }
+  }, [currentUser, product]);
 
   if (!product) return null;
 
@@ -19,27 +38,56 @@ export function OrderModal({ product, storeSetting, onClose }) {
   const totalPrice = (product.price || 0) * quantity;
   const imageSrc = product.imageurl || product.imageUrl;
 
-  const handleSendToWhatsApp = (e) => {
+  const handleSendToWhatsApp = async (e) => {
     e.preventDefault();
+    setIsOrdering(true);
 
-    const phone = storeSetting?.phone || "0895338977816";
-    let cleanPhone = phone.replace(/[^0-9]/g, "");
-    if (cleanPhone.startsWith("0")) {
-      cleanPhone = "62" + cleanPhone.slice(1);
-    }
+    try {
+      const orderPayload = {
+        customerName: customerName.trim() || currentUser?.name || "Pelanggan WarungKlik",
+        customerPhone: customerPhone.trim() || currentUser?.phone || "",
+        customerAddress: customerAddress.trim() || currentUser?.address || "",
+        items: [
+          {
+            productId: product.id || product._id,
+            name: product.name,
+            price: product.price,
+            quantity,
+            imageUrl: imageSrc,
+          },
+        ],
+        totalPrice,
+        notes: notes.trim(),
+      };
 
-    const message = `Halo ${storeSetting?.storeName || "WarungKlik"}, saya ingin memesan:
+      const orderRes = await createOrder(orderPayload);
+      const orderId = orderRes?.data?.id || "";
+
+      if (onOrderCreated) onOrderCreated();
+
+      const phone = storeSetting?.phone || "0895338977816";
+      let cleanPhone = phone.replace(/[^0-9]/g, "");
+      if (cleanPhone.startsWith("0")) {
+        cleanPhone = "62" + cleanPhone.slice(1);
+      }
+
+      const message = `Halo ${storeSetting?.storeName || "WarungKlik"}, saya ingin memesan${orderId ? ` (${orderId})` : ""}:
 - Menu: ${product.name}
 - Jumlah: ${quantity} porsi
 - Total: ${formatRupiah(totalPrice)}
-${customerName ? `- Nama Pemesan: ${customerName}` : ""}
+- Nama Pemesan: ${orderPayload.customerName}
+${orderPayload.customerPhone ? `- No. WA: ${orderPayload.customerPhone}` : ""}
+${orderPayload.customerAddress ? `- Alamat: ${orderPayload.customerAddress}` : ""}
 ${notes ? `- Catatan: ${notes}` : ""}
 
 Mohon konfirmasi pesanan saya. Terima kasih!`;
 
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    window.open(waUrl, "_blank");
-    onClose();
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(waUrl, "_blank");
+      onClose();
+    } finally {
+      setIsOrdering(false);
+    }
   };
 
   return (
@@ -122,10 +170,25 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                 <input
                   id="customer-name"
                   type="text"
+                  required
                   className="figma-input"
                   placeholder="Nama Anda..."
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="field-label" htmlFor="customer-address">
+                  Alamat Pengiriman (Opsional)
+                </label>
+                <input
+                  id="customer-address"
+                  type="text"
+                  className="figma-input"
+                  placeholder="Alamat lengkap..."
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
                 />
               </div>
 
@@ -148,13 +211,28 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                 <strong>{formatRupiah(totalPrice)}</strong>
               </div>
 
-              <div>
-                <button type="submit" className="btn-whatsapp-order">
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {onAddToBag && (
+                  <button
+                    type="button"
+                    className="category-chip-btn"
+                    style={{ width: "100%", justifyContent: "center", padding: "0.75rem 1rem" }}
+                    onClick={() => {
+                      onAddToBag(product, quantity);
+                      onClose();
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Tambah ke My Bag ({quantity})</span>
+                  </button>
+                )}
+
+                <button type="submit" className="btn-whatsapp-order" disabled={isOrdering}>
                   <ShoppingBag size={18} />
-                  <span>Order via WhatsApp</span>
+                  <span>{isOrdering ? "Memproses..." : "Order via WhatsApp"}</span>
                 </button>
                 <p className="order-reassurance-text">
-                  We’ll confirm your order & delivery in chat.
+                  Pesanan otomatis tercatat di riwayat & diteruskan ke WhatsApp.
                 </p>
               </div>
             </form>

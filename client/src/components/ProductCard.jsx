@@ -1,8 +1,17 @@
 import React from "react";
-import { Plus, ShoppingBag } from "./Icons.jsx";
+import { Plus, ShoppingBag, Heart, X } from "./Icons.jsx";
 
-export function ProductCard({ product, onSelectProduct }) {
-  const isOutOfStock = product.stockStatus === "out_of_stock" || product.stock === 0;
+export function ProductCard({
+  product,
+  onSelectProduct,
+  onAddToBag,
+  isFavorite = false,
+  onToggleFavorite,
+}) {
+  const isOutOfStock =
+    product.stockStatus === "out_of_stock" ||
+    product.stockStatus === "Habis" ||
+    product.stock === 0;
 
   const formatRupiah = (val) => {
     return new Intl.NumberFormat("id-ID", {
@@ -16,7 +25,11 @@ export function ProductCard({ product, onSelectProduct }) {
 
   return (
     <article className="food-card">
-      <div className="food-photography">
+      <div
+        className="food-photography"
+        onClick={() => !isOutOfStock && onSelectProduct && onSelectProduct(product)}
+        style={{ cursor: isOutOfStock ? "default" : "pointer", position: "relative" }}
+      >
         {imageSrc ? (
           <img
             src={
@@ -33,14 +46,65 @@ export function ProductCard({ product, onSelectProduct }) {
             <ShoppingBag size={34} />
           </div>
         )}
-        {product.categoryName && (
-          <span className="dish-badge">{product.categoryName}</span>
+
+        {onToggleFavorite && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(product);
+            }}
+            title={isFavorite ? "Hapus dari Favorit" : "Simpan ke Favorit"}
+            aria-label="Simpan ke Favorit"
+            style={{
+              position: "absolute",
+              top: "0.75rem",
+              right: "0.75rem",
+              width: "34px",
+              height: "34px",
+              borderRadius: "50%",
+              backgroundColor: "rgba(255, 255, 255, 0.92)",
+              border: "1px solid var(--border-color)",
+              color: isFavorite ? "#dc2626" : "var(--text-secondary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Heart
+              size={16}
+              style={{
+                fill: isFavorite ? "#dc2626" : "none",
+              }}
+            />
+          </button>
         )}
       </div>
 
       <div className="food-details">
         <div>
-          <h3 className="dish-title">{product.name}</h3>
+          {product.categoryName && (
+            <div
+              style={{
+                fontSize: "0.6875rem",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "var(--primary)",
+                marginBottom: "0.2rem",
+              }}
+            >
+              {product.categoryName}
+            </div>
+          )}
+          <h3
+            className="dish-title"
+            onClick={() => !isOutOfStock && onSelectProduct && onSelectProduct(product)}
+            style={{ cursor: isOutOfStock ? "default" : "pointer" }}
+          >
+            {product.name}
+          </h3>
           <p className="dish-ingredients">
             {product.description || "Freshly prepared with authentic ingredients"}
           </p>
@@ -48,16 +112,24 @@ export function ProductCard({ product, onSelectProduct }) {
 
         <div className="price-and-add-row">
           <span className="dish-price">{formatRupiah(product.price)}</span>
-          <button
-            type="button"
-            className="add-to-bag-btn"
-            onClick={() => onSelectProduct(product)}
-            disabled={isOutOfStock}
-            title={isOutOfStock ? "Menu Habis" : "Tambah ke Pesanan"}
-            aria-label={`Pesan ${product.name}`}
-          >
-            {isOutOfStock ? <span style={{ fontSize: "11px" }}>✕</span> : <Plus size={18} />}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+            <button
+              type="button"
+              className="add-to-bag-btn"
+              onClick={() => {
+                if (onAddToBag) {
+                  onAddToBag(product);
+                } else if (onSelectProduct) {
+                  onSelectProduct(product);
+                }
+              }}
+              disabled={isOutOfStock}
+              title={isOutOfStock ? "Menu Habis" : "Tambah ke My Bag"}
+              aria-label={`Tambah ${product.name} ke keranjang`}
+            >
+              {isOutOfStock ? <X size={15} /> : <Plus size={18} />}
+            </button>
+          </div>
         </div>
       </div>
     </article>
