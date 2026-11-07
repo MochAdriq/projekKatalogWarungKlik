@@ -291,6 +291,7 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
           categories={categories}
           storeSetting={storeSetting}
           adminUser={adminUser}
+          onUpdateAdminUser={setAdminUser}
           onRefreshData={loadData}
           onBackToCatalog={() => setIsAdminView(false)}
           onLogout={handleLogout}
@@ -920,6 +921,7 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
         isOpen={isAdminLoginOpen}
         onClose={() => setIsAdminLoginOpen(false)}
         currentUser={adminUser}
+        storeSetting={storeSetting}
         onLogout={handleLogout}
         onOpenAdminConsole={() => setIsAdminView(true)}
         onLogin={(user) => {

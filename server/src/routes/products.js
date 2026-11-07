@@ -8,18 +8,32 @@ import { authenticateToken } from "../middleware/auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadDir = path.join(__dirname, "../uploads");
+const uploadDir = path.join(__dirname, "../../uploads");
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
+const MIME_TO_EXT = {
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "image/avif": ".avif",
+  "image/svg+xml": ".svg",
+  "image/bmp": ".bmp",
+};
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    let ext = (path.extname(file.originalname || "") || "").toLowerCase();
+    if (!ext || ext === ".jfif" || ext === ".jpe") {
+      ext = MIME_TO_EXT[(file.mimetype || "").toLowerCase()] || ".jpg";
+    }
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, `product-${uniqueSuffix}${ext}`);
   },
@@ -27,19 +41,32 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      const allowed = /jpeg|jpg|png|webp|gif/;
-      const ext = path.extname(file.originalname).toLowerCase().replace(".", "");
-      const mime = file.mimetype.toLowerCase();
-      if (allowed.test(ext) || allowed.test(mime)) {
-        return cb(null, true);
-      }
+    const allowed = /jpeg|jpg|png|webp|gif|avif|jfif|svg|bmp/;
+    const ext = path.extname(file.originalname || "").toLowerCase().replace(".", "");
+    const mime = (file.mimetype || "").toLowerCase();
+    if (mime.startsWith("image/") && (allowed.test(ext) || allowed.test(mime))) {
+      return cb(null, true);
     }
-    cb(new Error("Only image files are allowed!"));
+    cb(new Error("Format file tidak didukung. Gunakan JPG, JPEG, PNG, WEBP, AVIF, atau GIF."));
   },
 });
+
+const uploadImageMiddleware = (req, res, next) => {
+  upload.single("image")(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message:
+          err.code === "LIMIT_FILE_SIZE"
+            ? "Ukuran foto terlalu besar (Maksimal 10 MB)"
+            : err.message || "Gagal mengunggah foto menu",
+      });
+    }
+    next();
+  });
+};
 
 const router = express.Router();
 
@@ -76,7 +103,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/", authenticateToken, uploadImageMiddleware, async (req, res) => {
   try {
     const { name, price, stockStatus, categoryId, description, imageurl } = req.body;
     if (!name || !name.trim()) {
@@ -122,7 +149,7 @@ router.post("/", authenticateToken, upload.single("image"), async (req, res) => 
   }
 });
 
-router.put("/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.put("/:id", authenticateToken, uploadImageMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, price, stockStatus, categoryId, description, imageurl } = req.body;

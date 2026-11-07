@@ -310,7 +310,46 @@ export const updateOrderStatus = async (orderId, status) => {
   return await res.json();
 };
 
-// Admin Users Management API
+// Admin Users Management & Store Settings API
+export const updateStoreSetting = async (payload) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/stores`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
+};
+
+export const updateAdminProfile = async (payload) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/admin-profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
+};
+
+export const updateUserByAdmin = async (userId, payload) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
+};
+
 export const fetchAllUsers = async () => {
   const token = getAuthToken();
   try {

@@ -506,7 +506,7 @@ class MysqlDatabase {
     return await this.getUserById(id);
   }
 
-  async updateUserProfile(id, { name, phone, address }) {
+  async updateUserProfile(id, { name, phone, address, newPassword }) {
     await this.ensureReady();
     const existing = await this.getUserById(id);
     if (!existing) return null;
@@ -514,10 +514,69 @@ class MysqlDatabase {
     const nextPhone = phone !== undefined ? phone.trim() : existing.phone || "";
     const nextAddress = address !== undefined ? address.trim() : existing.address || "";
 
-    await this.pool.query(
-      "UPDATE users SET name = ?, phone = ?, address = ? WHERE id = ?",
-      [nextName, nextPhone, nextAddress, id]
-    );
+    if (newPassword && String(newPassword).trim().length >= 6) {
+      const hashed = bcrypt.hashSync(String(newPassword).trim(), 10);
+      await this.pool.query(
+        "UPDATE users SET name = ?, phone = ?, address = ?, password = ? WHERE id = ?",
+        [nextName, nextPhone, nextAddress, hashed, id]
+      );
+    } else {
+      await this.pool.query(
+        "UPDATE users SET name = ?, phone = ?, address = ? WHERE id = ?",
+        [nextName, nextPhone, nextAddress, id]
+      );
+    }
+    return await this.getUserById(id);
+  }
+
+  async updateAdminProfile(id, { name, email, newPassword }) {
+    await this.ensureReady();
+    const [rows] = await this.pool.query("SELECT id, name, email, password FROM admins WHERE id = ? LIMIT 1", [id]);
+    const admin = rows[0] || (await this.getAdmin());
+    if (!admin) return null;
+
+    const targetId = admin.id;
+    const nextName = name !== undefined && name.trim() ? name.trim() : admin.name;
+    const nextEmail = email !== undefined && email.trim() ? email.trim().toLowerCase() : admin.email;
+
+    if (newPassword && String(newPassword).trim().length >= 6) {
+      const hashed = bcrypt.hashSync(String(newPassword).trim(), 10);
+      await this.pool.query(
+        "UPDATE admins SET name = ?, email = ?, password = ? WHERE id = ?",
+        [nextName, nextEmail, hashed, targetId]
+      );
+    } else {
+      await this.pool.query(
+        "UPDATE admins SET name = ?, email = ? WHERE id = ?",
+        [nextName, nextEmail, targetId]
+      );
+    }
+
+    return await this.getUserById(targetId);
+  }
+
+  async updateUserByAdmin(id, { name, email, phone, address, newPassword }) {
+    await this.ensureReady();
+    const existing = await this.getUserById(id);
+    if (!existing) return null;
+
+    const nextName = name !== undefined && name.trim() ? name.trim() : existing.name;
+    const nextEmail = email !== undefined && email.trim() ? email.trim().toLowerCase() : existing.email;
+    const nextPhone = phone !== undefined ? phone.trim() : existing.phone || "";
+    const nextAddress = address !== undefined ? address.trim() : existing.address || "";
+
+    if (newPassword && String(newPassword).trim().length >= 6) {
+      const hashed = bcrypt.hashSync(String(newPassword).trim(), 10);
+      await this.pool.query(
+        "UPDATE users SET name = ?, email = ?, phone = ?, address = ?, password = ? WHERE id = ?",
+        [nextName, nextEmail, nextPhone, nextAddress, hashed, id]
+      );
+    } else {
+      await this.pool.query(
+        "UPDATE users SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?",
+        [nextName, nextEmail, nextPhone, nextAddress, id]
+      );
+    }
     return await this.getUserById(id);
   }
 

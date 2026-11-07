@@ -142,11 +142,22 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
-// Update customer profile
+// Update customer profile (including optional password change)
 router.put("/profile", authenticateToken, async (req, res) => {
   try {
-    const { name, phone, address } = req.body;
-    const updated = await db.updateUserProfile(req.user.id, { name, phone, address });
+    const { name, phone, address, newPassword } = req.body;
+    if (newPassword && String(newPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password baru minimal 6 karakter",
+      });
+    }
+    const updated = await db.updateUserProfile(req.user.id, {
+      name,
+      phone,
+      address,
+      newPassword,
+    });
     if (!updated) {
       return res.status(404).json({ success: false, message: "User tidak ditemukan" });
     }
@@ -160,11 +171,69 @@ router.put("/profile", authenticateToken, async (req, res) => {
   }
 });
 
+// Admin: Update Admin profile (Name, Email, Password)
+router.put("/admin-profile", authenticateToken, async (req, res) => {
+  try {
+    const { name, email, newPassword } = req.body;
+    if (newPassword && String(newPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password admin baru minimal 6 karakter",
+      });
+    }
+    const updated = await db.updateAdminProfile(req.user.id, {
+      name,
+      email,
+      newPassword,
+    });
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Akun admin tidak ditemukan" });
+    }
+    res.json({
+      success: true,
+      message: "Profil & keamanan Admin berhasil diperbarui",
+      data: updated,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Admin: Get all registered users
 router.get("/users", authenticateToken, async (req, res) => {
   try {
     const users = await db.getAllUsers();
     res.json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin: Update / Reset password of a user
+router.put("/users/:id", authenticateToken, async (req, res) => {
+  try {
+    const { name, email, phone, address, newPassword } = req.body;
+    if (newPassword && String(newPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password baru minimal 6 karakter",
+      });
+    }
+    const updated = await db.updateUserByAdmin(req.params.id, {
+      name,
+      email,
+      phone,
+      address,
+      newPassword,
+    });
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "User tidak ditemukan" });
+    }
+    res.json({
+      success: true,
+      message: "Data & password user berhasil diperbarui",
+      data: updated,
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

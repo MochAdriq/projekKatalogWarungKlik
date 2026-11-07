@@ -33,7 +33,27 @@ const uploadPath = path.join(__dirname, "../uploads");
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }
+
+// Migrate any files accidentally uploaded to server/src/uploads into server/uploads
+const legacyUploadPath = path.join(__dirname, "uploads");
+if (fs.existsSync(legacyUploadPath)) {
+  try {
+    for (const file of fs.readdirSync(legacyUploadPath)) {
+      const srcFile = path.join(legacyUploadPath, file);
+      const destFile = path.join(uploadPath, file);
+      if (!fs.existsSync(destFile)) {
+        fs.copyFileSync(srcFile, destFile);
+      }
+    }
+  } catch (err) {
+    console.error("Failed migrating legacy uploads:", err.message);
+  }
+}
+
 app.use("/uploads", express.static(uploadPath));
+if (fs.existsSync(legacyUploadPath)) {
+  app.use("/uploads", express.static(legacyUploadPath));
+}
 
 app.use("/api/auth", authRoutes);
 app.use("/api/categories", categoryRoutes);

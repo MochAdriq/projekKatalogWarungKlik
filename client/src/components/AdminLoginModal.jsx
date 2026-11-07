@@ -4,6 +4,7 @@ import {
   loginAdmin,
   registerUser,
   updateUserProfile,
+  updateAdminProfile,
   setAuthToken,
 } from "../services/api.js";
 
@@ -12,12 +13,14 @@ export function AdminLoginModal({
   onClose,
   onLogin,
   currentUser,
+  storeSetting,
   onLogout,
   onOpenAdminConsole,
 }) {
-  const [authTab, setAuthTab] = useState("login"); // 'login' | 'register'
+  const [authTab, setAuthTab] = useState("login"); // 'login' | 'register' | 'forgot'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -28,8 +31,10 @@ export function AdminLoginModal({
   useEffect(() => {
     if (isOpen && currentUser) {
       setName(currentUser.name || "");
+      setEmail(currentUser.email || "");
       setPhone(currentUser.phone || "");
       setAddress(currentUser.address || "");
+      setNewPassword("");
       setErrorMsg("");
       setSuccessMsg("");
     } else if (isOpen) {
@@ -39,6 +44,23 @@ export function AdminLoginModal({
   }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
+
+  const handleForgotWhatsApp = (e) => {
+    e.preventDefault();
+    const adminPhone = storeSetting?.phone || "6281234567890";
+    let cleanPhone = adminPhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "62" + cleanPhone.slice(1);
+    }
+
+    const storeName = storeSetting?.storeName || "WarungKlik";
+    const text = `Halo Admin ${storeName}, saya meminta bantuan Reset Password untuk akun pelanggan saya:\n- Email Akun: ${email.trim()}\n${
+      name.trim() ? `- Nama Akun: ${name.trim()}\n` : ""
+    }\nMohon bantuannya untuk mengatur ulang password akun saya. Terima kasih!`;
+
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
+    onClose();
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,10 +107,25 @@ export function AdminLoginModal({
     setSuccessMsg("");
     setIsSubmitting(true);
     try {
-      const res = await updateUserProfile({ name, phone, address });
+      let res;
+      if (currentUser?.role === "admin") {
+        const payload = { name, email };
+        if (newPassword.trim()) payload.newPassword = newPassword.trim();
+        res = await updateAdminProfile(payload);
+      } else {
+        const payload = { name, phone, address };
+        if (newPassword.trim()) payload.newPassword = newPassword.trim();
+        res = await updateUserProfile(payload);
+      }
+
       if (res.success && res.data) {
         onLogin(res.data);
-        setSuccessMsg("Profil akun berhasil diperbarui!");
+        setNewPassword("");
+        setSuccessMsg(
+          newPassword.trim()
+            ? "Profil dan password berhasil diperbarui!"
+            : "Profil akun berhasil diperbarui!"
+        );
       } else {
         setErrorMsg(res.message || "Gagal memperbarui profil");
       }
@@ -202,10 +239,16 @@ export function AdminLoginModal({
                 <label className="field-label">Email Terdaftar</label>
                 <input
                   type="email"
-                  disabled
+                  disabled={currentUser.role !== "admin"}
+                  required
                   className="figma-input"
-                  value={currentUser.email || ""}
-                  style={{ opacity: 0.7, cursor: "not-allowed" }}
+                  value={currentUser.role === "admin" ? email : currentUser.email || ""}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={
+                    currentUser.role !== "admin"
+                      ? { opacity: 0.7, cursor: "not-allowed" }
+                      : {}
+                  }
                 />
               </div>
 
@@ -246,11 +289,28 @@ export function AdminLoginModal({
                 </>
               )}
 
+              <div className="form-field">
+                <label className="field-label">Ganti Password Baru (Opsional)</label>
+                <input
+                  type="password"
+                  className="figma-input"
+                  placeholder="Kosongkan jika tidak ingin ganti password..."
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", marginTop: "0.5rem" }}>
-                {currentUser.role === "admin" ? (
+                <button type="submit" className="btn-whatsapp-order" disabled={isSubmitting}>
+                  <Check size={16} />
+                  <span>{isSubmitting ? "Menyimpan..." : "Simpan Perubahan Profil"}</span>
+                </button>
+
+                {currentUser.role === "admin" && (
                   <button
                     type="button"
-                    className="btn-whatsapp-order"
+                    className="category-chip-btn"
+                    style={{ width: "100%", justifyContent: "center", padding: "0.7rem 1rem" }}
                     onClick={() => {
                       onClose();
                       if (onOpenAdminConsole) onOpenAdminConsole();
@@ -258,11 +318,6 @@ export function AdminLoginModal({
                   >
                     <Store size={16} />
                     <span>Buka Admin Console</span>
-                  </button>
-                ) : (
-                  <button type="submit" className="btn-whatsapp-order" disabled={isSubmitting}>
-                    <Check size={16} />
-                    <span>{isSubmitting ? "Menyimpan..." : "Simpan Profil"}</span>
                   </button>
                 )}
 
@@ -347,134 +402,212 @@ export function AdminLoginModal({
               </button>
             </div>
 
-            <p
-              style={{
-                fontSize: "0.85rem",
-                color: "var(--text-muted)",
-                marginBottom: "1.25rem",
-                lineHeight: 1.5,
-              }}
-            >
-              {authTab === "login"
-                ? "Masuk untuk mengakses menu favorit, keranjang pesanan, riwayat transaksi, atau ruang pengelola."
-                : "Daftar akun pembeli untuk menyimpan menu favorit, keranjang belanja, dan mempercepat pemesanan."}
-            </p>
+            {authTab === "forgot" ? (
+              <form
+                onSubmit={handleForgotWhatsApp}
+                style={{ display: "flex", flexDirection: "column", gap: "0.95rem" }}
+              >
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                  Masukkan email akun Anda. Sistem akan mengarahkan Anda ke WhatsApp Admin Toko untuk meminta reset password secara langsung.
+                </p>
 
-            <form
-              onSubmit={handleSubmit}
-              style={{ display: "flex", flexDirection: "column", gap: "0.95rem" }}
-            >
-              {errorMsg && (
-                <div
-                  style={{
-                    padding: "0.75rem 1rem",
-                    backgroundColor: "var(--danger-bg)",
-                    border: "1px solid #fecaca",
-                    color: "var(--danger)",
-                    borderRadius: "var(--radius-sm)",
-                    fontSize: "0.8125rem",
-                  }}
-                >
-                  {errorMsg}
-                </div>
-              )}
-
-              {authTab === "register" && (
                 <div className="form-field">
-                  <label className="field-label" htmlFor="reg-name">
-                    Nama Lengkap
+                  <label className="field-label" htmlFor="forgot-email">
+                    Email Akun Terdaftar
                   </label>
                   <input
-                    id="reg-name"
-                    type="text"
+                    id="forgot-email"
+                    type="email"
                     required
                     className="figma-input"
-                    placeholder="Contoh: Budi Santoso"
+                    placeholder="nama@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label" htmlFor="forgot-name">
+                    Nama Pengguna (Opsional)
+                  </label>
+                  <input
+                    id="forgot-name"
+                    type="text"
+                    className="figma-input"
+                    placeholder="Nama lengkap Anda..."
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
                 </div>
-              )}
 
-              <div className="form-field">
-                <label className="field-label" htmlFor="auth-email">
-                  Alamat Email
-                </label>
-                <input
-                  id="auth-email"
-                  type="email"
-                  required
-                  className="figma-input"
-                  placeholder="nama@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
+                <button type="submit" className="btn-whatsapp-order" style={{ marginTop: "0.35rem" }}>
+                  <Lock size={16} />
+                  <span>Hubungi WhatsApp Admin (Reset Password)</span>
+                </button>
 
-              {authTab === "register" && (
-                <>
+                <button
+                  type="button"
+                  onClick={() => setAuthTab("login")}
+                  className="category-chip-btn"
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  <span>Kembali ke Halaman Masuk</span>
+                </button>
+              </form>
+            ) : (
+              <>
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "1.25rem",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {authTab === "login"
+                    ? "Masuk untuk mengakses menu favorit, keranjang pesanan, riwayat transaksi, atau ruang pengelola."
+                    : "Daftar akun pembeli untuk menyimpan menu favorit, keranjang belanja, dan mempercepat pemesanan."}
+                </p>
+
+                <form
+                  onSubmit={handleSubmit}
+                  style={{ display: "flex", flexDirection: "column", gap: "0.95rem" }}
+                >
+                  {errorMsg && (
+                    <div
+                      style={{
+                        padding: "0.75rem 1rem",
+                        backgroundColor: "var(--danger-bg)",
+                        border: "1px solid #fecaca",
+                        color: "var(--danger)",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: "0.8125rem",
+                      }}
+                    >
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  {authTab === "register" && (
+                    <div className="form-field">
+                      <label className="field-label" htmlFor="reg-name">
+                        Nama Lengkap
+                      </label>
+                      <input
+                        id="reg-name"
+                        type="text"
+                        required
+                        className="figma-input"
+                        placeholder="Contoh: Budi Santoso"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
+                  )}
+
                   <div className="form-field">
-                    <label className="field-label" htmlFor="reg-phone">
-                      Nomor WhatsApp
+                    <label className="field-label" htmlFor="auth-email">
+                      Alamat Email
                     </label>
                     <input
-                      id="reg-phone"
-                      type="text"
+                      id="auth-email"
+                      type="email"
                       required
                       className="figma-input"
-                      placeholder="0812xxxxxxxx"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="nama@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
+
+                  {authTab === "register" && (
+                    <>
+                      <div className="form-field">
+                        <label className="field-label" htmlFor="reg-phone">
+                          Nomor WhatsApp
+                        </label>
+                        <input
+                          id="reg-phone"
+                          type="text"
+                          required
+                          className="figma-input"
+                          placeholder="0812xxxxxxxx"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-field">
+                        <label className="field-label" htmlFor="reg-address">
+                          Alamat Pengiriman (Opsional)
+                        </label>
+                        <input
+                          id="reg-address"
+                          type="text"
+                          className="figma-input"
+                          placeholder="Jalan, nomor rumah, kecamatan..."
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div className="form-field">
-                    <label className="field-label" htmlFor="reg-address">
-                      Alamat Pengiriman (Opsional)
-                    </label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <label className="field-label" htmlFor="auth-password">
+                        Password
+                      </label>
+                      {authTab === "login" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthTab("forgot");
+                            setErrorMsg("");
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            color: "var(--primary)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Lupa Password?
+                        </button>
+                      )}
+                    </div>
                     <input
-                      id="reg-address"
-                      type="text"
+                      id="auth-password"
+                      type="password"
+                      required
                       className="figma-input"
-                      placeholder="Jalan, nomor rumah, kecamatan..."
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                </>
-              )}
 
-              <div className="form-field">
-                <label className="field-label" htmlFor="auth-password">
-                  Password
-                </label>
-                <input
-                  id="auth-password"
-                  type="password"
-                  required
-                  className="figma-input"
-                  placeholder="Minimal 6 karakter"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn-whatsapp-order"
-                style={{ marginTop: "0.35rem" }}
-                disabled={isSubmitting}
-              >
-                {authTab === "login" ? <Lock size={16} /> : <User size={16} />}
-                <span>
-                  {isSubmitting
-                    ? "Memproses..."
-                    : authTab === "login"
-                    ? "Masuk Sekarang"
-                    : "Buat Akun Pembeli"}
-                </span>
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    className="btn-whatsapp-order"
+                    style={{ marginTop: "0.35rem" }}
+                    disabled={isSubmitting}
+                  >
+                    {authTab === "login" ? <Lock size={16} /> : <User size={16} />}
+                    <span>
+                      {isSubmitting
+                        ? "Memproses..."
+                        : authTab === "login"
+                        ? "Masuk Sekarang"
+                        : "Buat Akun Pembeli"}
+                    </span>
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -12,6 +12,9 @@ import {
   X,
   AlertCircle,
   Upload,
+  Lock,
+  User,
+  Sliders,
 } from "./Icons.jsx";
 import {
   createProduct,
@@ -24,6 +27,9 @@ import {
   updateOrderStatus,
   fetchAllUsers,
   deleteUserAccount,
+  updateStoreSetting,
+  updateAdminProfile,
+  updateUserByAdmin,
 } from "../services/api.js";
 
 export function AdminDashboard({
@@ -31,16 +37,146 @@ export function AdminDashboard({
   categories = [],
   storeSetting,
   adminUser,
+  onUpdateAdminUser,
   onRefreshData,
   onBackToCatalog,
   onLogout,
 }) {
-  const [activeTab, setActiveTab] = useState("products"); // 'products', 'categories', 'orders', 'users'
+  const [activeTab, setActiveTab] = useState("products"); // 'products', 'categories', 'orders', 'users', 'settings'
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Store Settings Form State
+  const [storeForm, setStoreForm] = useState({
+    storeName: storeSetting?.storeName || "Toko Berkah Nusantara",
+    tagline: storeSetting?.tagline || "Kuliner Lezat & Segar Siap Antar Setiap Hari",
+    phone: storeSetting?.phone || "6281234567890",
+    address: storeSetting?.address || "Jl. Melati No. 12, Kebayoran Baru, Jakarta Selatan",
+  });
+  const [isSavingStore, setIsSavingStore] = useState(false);
+
+  // Admin Profile Form State
+  const [adminForm, setAdminForm] = useState({
+    name: adminUser?.name || "Admin Daily Greens",
+    email: adminUser?.email || "admin@warungklik.com",
+    newPassword: "",
+  });
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+
+  // Edit / Reset Password User Modal State
+  const [editingUser, setEditingUser] = useState(null);
+  const [userForm, setUserForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    newPassword: "",
+  });
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
+  useEffect(() => {
+    if (storeSetting) {
+      setStoreForm({
+        storeName: storeSetting.storeName || "",
+        tagline: storeSetting.tagline || "",
+        phone: storeSetting.phone || "",
+        address: storeSetting.address || "",
+      });
+    }
+  }, [storeSetting]);
+
+  useEffect(() => {
+    if (adminUser) {
+      setAdminForm((prev) => ({
+        ...prev,
+        name: adminUser.name || "",
+        email: adminUser.email || "",
+      }));
+    }
+  }, [adminUser]);
+
+  const handleSaveStoreSettings = async (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setStatusMessage("");
+    setIsSavingStore(true);
+    try {
+      const res = await updateStoreSetting(storeForm);
+      if (res?.success) {
+        setStatusMessage("Pengaturan Profil & WhatsApp Toko berhasil disimpan!");
+        if (onRefreshData) onRefreshData();
+      } else {
+        setErrorMessage(res?.message || "Gagal menyimpan pengaturan toko.");
+      }
+    } catch {
+      setErrorMessage("Terjadi kesalahan saat menyimpan pengaturan toko.");
+    } finally {
+      setIsSavingStore(false);
+    }
+  };
+
+  const handleSaveAdminProfile = async (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setStatusMessage("");
+    setIsSavingAdmin(true);
+    try {
+      const res = await updateAdminProfile(adminForm);
+      if (res?.success) {
+        setStatusMessage("Profil & Keamanan Admin berhasil diperbarui!");
+        setAdminForm((prev) => ({ ...prev, newPassword: "" }));
+        if (res.data && onUpdateAdminUser) {
+          onUpdateAdminUser(res.data);
+        }
+      } else {
+        setErrorMessage(res?.message || "Gagal memperbarui profil admin.");
+      }
+    } catch {
+      setErrorMessage("Terjadi kesalahan saat memperbarui profil admin.");
+    } finally {
+      setIsSavingAdmin(false);
+    }
+  };
+
+  const handleOpenEditUser = (u) => {
+    setEditingUser(u);
+    setUserForm({
+      name: u.name || "",
+      email: u.email || "",
+      phone: u.phone || "",
+      address: u.address || "",
+      newPassword: "",
+    });
+  };
+
+  const handleSaveUserByAdmin = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setErrorMessage("");
+    setStatusMessage("");
+    setIsSavingUser(true);
+    try {
+      const res = await updateUserByAdmin(editingUser.id, userForm);
+      if (res?.success) {
+        setStatusMessage(
+          userForm.newPassword.trim()
+            ? `Data & password baru untuk '${userForm.name}' berhasil disimpan!`
+            : `Data user '${userForm.name}' berhasil diperbarui!`
+        );
+        setEditingUser(null);
+        loadAdminExtras();
+      } else {
+        setErrorMessage(res?.message || "Gagal memperbarui akun user.");
+      }
+    } catch {
+      setErrorMessage("Terjadi kesalahan saat memperbarui akun user.");
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
 
   const loadAdminExtras = async () => {
     try {
@@ -139,8 +275,8 @@ export function AdminDashboard({
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMessage("Ukuran file foto maksimal 5 MB");
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMessage("Ukuran file foto maksimal 10 MB");
         return;
       }
       setSelectedFile(file);
@@ -401,6 +537,16 @@ export function AdminDashboard({
                 </span>
               </button>
             </li>
+
+            <li>
+              <button
+                type="button"
+                className={`admin-nav-item ${activeTab === "settings" ? "active" : ""}`}
+                onClick={() => setActiveTab("settings")}
+              >
+                <span>Pengaturan Toko & Admin</span>
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -435,7 +581,7 @@ export function AdminDashboard({
               </div>
               <div>
                 <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--text-main)" }}>
-                  {adminUser?.email?.split("@")[0] || "Admin"}
+                  {adminUser?.name || adminUser?.email?.split("@")[0] || "Admin"}
                 </div>
                 <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)" }}>Pengelola</div>
               </div>
@@ -474,7 +620,9 @@ export function AdminDashboard({
               ? "Kategori Menu"
               : activeTab === "orders"
               ? "Pesanan Masuk"
-              : "Daftar User"}
+              : activeTab === "users"
+              ? "Daftar User"
+              : "Pengaturan Toko & Admin"}
           </strong>
         </div>
 
@@ -937,15 +1085,27 @@ export function AdminDashboard({
                         <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{u.phone || "-"}</td>
                         <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{u.address || "-"}</td>
                         <td style={{ padding: "1rem", textAlign: "right" }}>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteUser(u)}
-                            className="category-chip-btn"
-                            style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem", color: "var(--danger)", borderColor: "#fecaca" }}
-                          >
-                            <Trash2 size={14} />
-                            <span>Hapus</span>
-                          </button>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditUser(u)}
+                              className="category-chip-btn"
+                              style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem" }}
+                              title="Edit Data / Reset Password User"
+                            >
+                              <Edit size={14} />
+                              <span>Edit / Reset Password</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              className="category-chip-btn"
+                              style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem", color: "var(--danger)", borderColor: "#fecaca" }}
+                            >
+                              <Trash2 size={14} />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -955,7 +1115,275 @@ export function AdminDashboard({
             )}
           </div>
         )}
+
+        {/* TAB 5: PENGATURAN TOKO & PROFIL ADMIN */}
+        {activeTab === "settings" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+            {/* KARTU 1: PENGATURAN PROFIL & WHATSAPP TOKO */}
+            <div
+              style={{
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "var(--radius-card)",
+                padding: "1.75rem",
+              }}
+            >
+              <div style={{ marginBottom: "1.5rem" }}>
+                <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)", marginBottom: "0.25rem" }}>
+                  Pengaturan Profil & WhatsApp Toko
+                </h1>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
+                  Konfigurasi disimpan di tabel SQL settings. Digunakan untuk redirect WhatsApp pesanan pelanggan.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveStoreSettings} style={{ display: "flex", flexDirection: "column", gap: "1.15rem", maxWidth: "680px" }}>
+                <div className="form-field">
+                  <label className="field-label">Nama Bisnis / Toko</label>
+                  <input
+                    type="text"
+                    required
+                    className="figma-input"
+                    placeholder="Toko Berkah Nusantara"
+                    value={storeForm.storeName}
+                    onChange={(e) => setStoreForm({ ...storeForm, storeName: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">Tagline Toko</label>
+                  <input
+                    type="text"
+                    required
+                    className="figma-input"
+                    placeholder="Kuliner Lezat & Segar Siap Antar Setiap Hari"
+                    value={storeForm.tagline}
+                    onChange={(e) => setStoreForm({ ...storeForm, tagline: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">
+                    Nomor WhatsApp Tujuan (Gunakan kode negara, cth: 6281234567890)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="figma-input"
+                    placeholder="6281234567890"
+                    value={storeForm.phone}
+                    onChange={(e) => setStoreForm({ ...storeForm, phone: e.target.value })}
+                  />
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                    Nomor ini yang akan menerima chat otomatis saat pelanggan mengklik "Kirim Pesanan ke WhatsApp".
+                  </span>
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">Alamat Toko</label>
+                  <textarea
+                    rows={2}
+                    required
+                    className="figma-textarea"
+                    placeholder="Jl. Melati No. 12, Kebayoran Baru, Jakarta Selatan"
+                    value={storeForm.address}
+                    onChange={(e) => setStoreForm({ ...storeForm, address: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    className="btn-whatsapp-order"
+                    style={{ width: "auto", margin: 0, padding: "0.65rem 1.5rem" }}
+                    disabled={isSavingStore}
+                  >
+                    <Check size={16} />
+                    <span>{isSavingStore ? "Menyimpan..." : "Simpan Pengaturan Toko"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* KARTU 2: EDIT PROFIL & KEAMANAN ADMIN */}
+            <div
+              style={{
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "var(--radius-card)",
+                padding: "1.75rem",
+              }}
+            >
+              <div style={{ marginBottom: "1.5rem" }}>
+                <h2 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)", marginBottom: "0.25rem" }}>
+                  Edit Profil & Keamanan Admin
+                </h2>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
+                  Perbarui Nama Pengguna Admin, Email Login, serta Password Admin utama Anda.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveAdminProfile} style={{ display: "flex", flexDirection: "column", gap: "1.15rem", maxWidth: "680px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-field">
+                    <label className="field-label">Nama Pengguna Admin</label>
+                    <input
+                      type="text"
+                      required
+                      className="figma-input"
+                      placeholder="Nama Admin..."
+                      value={adminForm.name}
+                      onChange={(e) => setAdminForm({ ...adminForm, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-field">
+                    <label className="field-label">Email Admin</label>
+                    <input
+                      type="email"
+                      required
+                      className="figma-input"
+                      placeholder="admin@warungklik.com"
+                      value={adminForm.email}
+                      onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">Password Admin Baru (Opsional)</label>
+                  <input
+                    type="password"
+                    className="figma-input"
+                    placeholder="Kosongkan jika tidak ingin mengubah password admin..."
+                    value={adminForm.newPassword}
+                    onChange={(e) => setAdminForm({ ...adminForm, newPassword: e.target.value })}
+                  />
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                    Minimal 6 karakter jika ingin mengganti password login Admin.
+                  </span>
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    className="btn-whatsapp-order"
+                    style={{ width: "auto", margin: 0, padding: "0.65rem 1.5rem" }}
+                    disabled={isSavingAdmin}
+                  >
+                    <Lock size={16} />
+                    <span>{isSavingAdmin ? "Menyimpan..." : "Simpan Profil Admin"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* MODAL EDIT / RESET PASSWORD USER OLEH ADMIN */}
+      {editingUser && (
+        <div className="modal-backdrop" onClick={() => setEditingUser(null)}>
+          <div
+            className="order-modal-card"
+            style={{ maxWidth: "520px", gridTemplateColumns: "1fr", padding: "2rem" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem" }}>
+              <div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-main)" }}>
+                  Edit Akun & Reset Password User
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+                  Perbarui informasi pelanggan atau atur ulang password baru.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserByAdmin} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div className="form-field">
+                <label className="field-label">Nama Lengkap User</label>
+                <input
+                  type="text"
+                  required
+                  className="figma-input"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+                <div className="form-field">
+                  <label className="field-label">Email User</label>
+                  <input
+                    type="email"
+                    required
+                    className="figma-input"
+                    value={userForm.email}
+                    onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  />
+                </div>
+                <div className="form-field">
+                  <label className="field-label">No. WhatsApp</label>
+                  <input
+                    type="text"
+                    className="figma-input"
+                    value={userForm.phone}
+                    onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-field">
+                <label className="field-label">Alamat Pengiriman</label>
+                <input
+                  type="text"
+                  className="figma-input"
+                  value={userForm.address}
+                  onChange={(e) => setUserForm({ ...userForm, address: e.target.value })}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="field-label">Reset Password Baru (Opsional)</label>
+                <input
+                  type="text"
+                  className="figma-input"
+                  placeholder="Ketik password baru (min. 6 karakter) jika user lupa password..."
+                  value={userForm.newPassword}
+                  onChange={(e) => setUserForm({ ...userForm, newPassword: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="category-chip-btn"
+                  onClick={() => setEditingUser(null)}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn-whatsapp-order"
+                  style={{ width: "auto", margin: 0, padding: "0.65rem 1.4rem" }}
+                  disabled={isSavingUser}
+                >
+                  <Check size={16} />
+                  <span>{isSavingUser ? "Menyimpan..." : "Simpan Perubahan User"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: TAMBAH / EDIT MENU DENGAN REAL FILE UPLOAD */}
       {isProductModalOpen && (
@@ -992,7 +1420,7 @@ export function AdminDashboard({
                   <input
                     type="file"
                     ref={fileInputRef}
-                    accept="image/png, image/jpeg, image/jpg, image/webp"
+                    accept="image/png, image/jpeg, image/jpg, image/webp, image/avif, image/gif, .jfif"
                     onChange={handleFileChange}
                     style={{ display: "none" }}
                   />
@@ -1056,7 +1484,7 @@ export function AdminDashboard({
                             Klik untuk memilih foto dari galeri / komputer
                           </span>
                           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                            Format: JPG, PNG, atau WEBP (Maksimal 5 MB)
+                            Format: JPG, JPEG, PNG, WEBP, AVIF, GIF (Maksimal 10 MB)
                           </span>
                         </div>
                       </>
