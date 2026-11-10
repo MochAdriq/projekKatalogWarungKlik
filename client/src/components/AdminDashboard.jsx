@@ -15,6 +15,9 @@ import {
   Lock,
   User,
   Sliders,
+  Search,
+  Eye,
+  EyeOff,
 } from "./Icons.jsx";
 import {
   createProduct,
@@ -25,6 +28,7 @@ import {
   getAuthToken,
   fetchAllOrders,
   updateOrderStatus,
+  bulkUpdateOrderStatus,
   fetchAllUsers,
   deleteUserAccount,
   updateStoreSetting,
@@ -65,6 +69,7 @@ export function AdminDashboard({
     newPassword: "",
   });
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Edit / Reset Password User Modal State
   const [editingUser, setEditingUser] = useState(null);
@@ -76,6 +81,14 @@ export function AdminDashboard({
     newPassword: "",
   });
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [showUserResetPassword, setShowUserResetPassword] = useState(false);
+
+  // Order Filtering & Bulk Status Update States
+  const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [bulkTargetStatus, setBulkTargetStatus] = useState("Diproses");
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   useEffect(() => {
     if (storeSetting) {
@@ -197,6 +210,60 @@ export function AdminDashboard({
     if (res?.success) {
       setStatusMessage(`Status pesanan ${orderId} diubah menjadi '${nextStatus}'`);
       loadAdminExtras();
+    }
+  };
+
+  const filteredOrders = orders.filter((ord) => {
+    const matchesStatus = orderStatusFilter === "ALL" || ord.status === orderStatusFilter;
+    const q = orderSearch.trim().toLowerCase();
+    if (!q) return matchesStatus;
+    const matchesId = (ord.id || "").toLowerCase().includes(q);
+    const matchesCustomer = (ord.customerName || "").toLowerCase().includes(q);
+    const matchesPhone = (ord.customerPhone || "").toLowerCase().includes(q);
+    const matchesItems = (ord.items || []).some((it) =>
+      (it.name || "").toLowerCase().includes(q)
+    );
+    return matchesStatus && (matchesId || matchesCustomer || matchesPhone || matchesItems);
+  });
+
+  const handleToggleSelectOrder = (orderId) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleToggleSelectAllOrders = () => {
+    const visibleIds = filteredOrders.map((o) => o.id);
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedOrderIds.includes(id));
+    if (allSelected) {
+      setSelectedOrderIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedOrderIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const handleBulkStatusSubmit = async () => {
+    if (selectedOrderIds.length === 0) return;
+    setErrorMessage("");
+    setStatusMessage("");
+    setIsBulkUpdating(true);
+    try {
+      const res = await bulkUpdateOrderStatus(selectedOrderIds, bulkTargetStatus);
+      if (res?.success) {
+        setStatusMessage(
+          res.message ||
+            `${selectedOrderIds.length} pesanan berhasil diubah ke status '${bulkTargetStatus}'`
+        );
+        setSelectedOrderIds([]);
+        await loadAdminExtras();
+      } else {
+        setErrorMessage(res?.message || "Gagal memperbarui status pesanan secara massal.");
+      }
+    } catch {
+      setErrorMessage("Terjadi kesalahan saat memperbarui status pesanan secara massal.");
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -458,13 +525,11 @@ export function AdminDashboard({
                 <span
                   style={{
                     fontSize: "0.75rem",
-                    padding: "0.1rem 0.5rem",
-                    borderRadius: "var(--radius-pill)",
-                    backgroundColor: activeTab === "products" ? "var(--primary)" : "var(--bg-muted)",
-                    color: activeTab === "products" ? "#fff" : "var(--text-secondary)",
+                    fontWeight: 600,
+                    color: activeTab === "products" ? "var(--primary)" : "var(--text-muted)",
                   }}
                 >
-                  {products.length}
+                  ({products.length})
                 </span>
               </button>
             </li>
@@ -479,13 +544,11 @@ export function AdminDashboard({
                 <span
                   style={{
                     fontSize: "0.75rem",
-                    padding: "0.1rem 0.5rem",
-                    borderRadius: "var(--radius-pill)",
-                    backgroundColor: activeTab === "categories" ? "var(--primary)" : "var(--bg-muted)",
-                    color: activeTab === "categories" ? "#fff" : "var(--text-secondary)",
+                    fontWeight: 600,
+                    color: activeTab === "categories" ? "var(--primary)" : "var(--text-muted)",
                   }}
                 >
-                  {categories.length}
+                  ({categories.length})
                 </span>
               </button>
             </li>
@@ -503,13 +566,11 @@ export function AdminDashboard({
                 <span
                   style={{
                     fontSize: "0.75rem",
-                    padding: "0.1rem 0.5rem",
-                    borderRadius: "var(--radius-pill)",
-                    backgroundColor: activeTab === "orders" ? "var(--primary)" : "var(--bg-muted)",
-                    color: activeTab === "orders" ? "#fff" : "var(--text-secondary)",
+                    fontWeight: 600,
+                    color: activeTab === "orders" ? "var(--primary)" : "var(--text-muted)",
                   }}
                 >
-                  {orders.length}
+                  ({orders.length})
                 </span>
               </button>
             </li>
@@ -527,13 +588,11 @@ export function AdminDashboard({
                 <span
                   style={{
                     fontSize: "0.75rem",
-                    padding: "0.1rem 0.5rem",
-                    borderRadius: "var(--radius-pill)",
-                    backgroundColor: activeTab === "users" ? "var(--primary)" : "var(--bg-muted)",
-                    color: activeTab === "users" ? "#fff" : "var(--text-secondary)",
+                    fontWeight: 600,
+                    color: activeTab === "users" ? "var(--primary)" : "var(--text-muted)",
                   }}
                 >
-                  {users.length}
+                  ({users.length})
                 </span>
               </button>
             </li>
@@ -945,13 +1004,13 @@ export function AdminDashboard({
               padding: "1.75rem",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem" }}>
               <div>
                 <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)" }}>
                   Daftar Pesanan Pelanggan
                 </h1>
                 <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
-                  Kelola status pesanan yang masuk dari pelanggan
+                  Filter pesanan dan ubah status pesanan secara satuan maupun massal (bulk)
                 </p>
               </div>
               <button type="button" className="category-chip-btn" onClick={loadAdminExtras}>
@@ -960,15 +1019,160 @@ export function AdminDashboard({
               </button>
             </div>
 
-            {orders.length === 0 ? (
+            {/* Filter Controls: Status Tabs & Search Input */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "1rem",
+                marginBottom: "1.25rem",
+                paddingBottom: "1rem",
+                borderBottom: "1px solid var(--border-color)",
+              }}
+            >
+              <div className="category-chips-group">
+                {[
+                  { value: "ALL", label: `Semua (${orders.length})` },
+                  {
+                    value: "Menunggu Konfirmasi",
+                    label: `Menunggu Konfirmasi (${orders.filter((o) => o.status === "Menunggu Konfirmasi").length})`,
+                  },
+                  {
+                    value: "Diproses",
+                    label: `Diproses (${orders.filter((o) => o.status === "Diproses").length})`,
+                  },
+                  {
+                    value: "Selesai",
+                    label: `Selesai (${orders.filter((o) => o.status === "Selesai").length})`,
+                  },
+                  {
+                    value: "Dibatalkan",
+                    label: `Dibatalkan (${orders.filter((o) => o.status === "Dibatalkan").length})`,
+                  },
+                ].map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    className={`category-chip-btn ${orderStatusFilter === tab.value ? "active" : ""}`}
+                    style={{ padding: "0.45rem 0.95rem", fontSize: "0.8125rem" }}
+                    onClick={() => setOrderStatusFilter(tab.value)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="figma-search-bar" style={{ width: "290px", padding: "0.5rem 0.85rem" }}>
+                <span className="search-icon-muted">
+                  <Search size={16} />
+                </span>
+                <input
+                  type="text"
+                  className="figma-search-input"
+                  placeholder="Cari ID, nama, WA, atau menu..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                />
+                {orderSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderSearch("")}
+                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Bulk Status Action Bar */}
+            {selectedOrderIds.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.85rem",
+                  padding: "0.85rem 1.15rem",
+                  backgroundColor: "var(--primary-soft)",
+                  border: "1px solid rgba(52, 91, 61, 0.25)",
+                  borderRadius: "var(--radius-input)",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--text-forest)" }}>
+                  {selectedOrderIds.length} pesanan dipilih
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.6rem" }}>
+                  <span style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", fontWeight: 500 }}>
+                    Ubah status ke:
+                  </span>
+                  <select
+                    className="figma-input"
+                    style={{ width: "auto", padding: "0.45rem 0.75rem", fontSize: "0.8125rem" }}
+                    value={bulkTargetStatus}
+                    onChange={(e) => setBulkTargetStatus(e.target.value)}
+                  >
+                    <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
+                    <option value="Diproses">Diproses</option>
+                    <option value="Selesai">Selesai</option>
+                    <option value="Dibatalkan">Dibatalkan</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    className="btn-whatsapp-order"
+                    style={{ width: "auto", margin: 0, padding: "0.5rem 1rem", fontSize: "0.8125rem" }}
+                    onClick={handleBulkStatusSubmit}
+                    disabled={isBulkUpdating}
+                  >
+                    <Check size={15} />
+                    <span>
+                      {isBulkUpdating
+                        ? "Memproses..."
+                        : `Terapkan ke ${selectedOrderIds.length} Pesanan`}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="category-chip-btn"
+                    style={{ padding: "0.45rem 0.85rem", fontSize: "0.8125rem" }}
+                    onClick={() => setSelectedOrderIds([])}
+                  >
+                    Batal Pilih
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {filteredOrders.length === 0 ? (
               <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
-                Belum ada pesanan yang masuk.
+                {orders.length === 0
+                  ? "Belum ada pesanan yang masuk."
+                  : "Tidak ada pesanan yang cocok dengan filter atau pencarian."}
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                      <th style={{ padding: "0.75rem 0.75rem", width: "40px" }}>
+                        <input
+                          type="checkbox"
+                          aria-label="Pilih semua pesanan yang tampil"
+                          checked={
+                            filteredOrders.length > 0 &&
+                            filteredOrders.every((o) => selectedOrderIds.includes(o.id))
+                          }
+                          onChange={handleToggleSelectAllOrders}
+                          style={{ width: "16px", height: "16px", accentColor: "var(--primary)", cursor: "pointer" }}
+                        />
+                      </th>
                       <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>ID & Waktu</th>
                       <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Pelanggan</th>
                       <th style={{ padding: "0.75rem 1rem", color: "var(--text-secondary)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>Rincian Menu</th>
@@ -977,57 +1181,75 @@ export function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((ord) => (
-                      <tr key={ord.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
-                        <td style={{ padding: "1rem" }}>
-                          <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.id}</strong>
-                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                            {ord.createdAt ? new Date(ord.createdAt).toLocaleString("id-ID") : ""}
-                          </span>
-                        </td>
-                        <td style={{ padding: "1rem" }}>
-                          <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.customerName}</strong>
-                          {ord.customerPhone && (
-                            <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block" }}>
-                              WA: {ord.customerPhone}
+                    {filteredOrders.map((ord) => {
+                      const isChecked = selectedOrderIds.includes(ord.id);
+                      return (
+                        <tr
+                          key={ord.id}
+                          style={{
+                            borderBottom: "1px solid var(--border-color)",
+                            backgroundColor: isChecked ? "rgba(52, 91, 61, 0.04)" : "transparent",
+                          }}
+                        >
+                          <td style={{ padding: "1rem 0.75rem" }}>
+                            <input
+                              type="checkbox"
+                              aria-label={`Pilih pesanan ${ord.id}`}
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectOrder(ord.id)}
+                              style={{ width: "16px", height: "16px", accentColor: "var(--primary)", cursor: "pointer" }}
+                            />
+                          </td>
+                          <td style={{ padding: "1rem" }}>
+                            <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.id}</strong>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                              {ord.createdAt ? new Date(ord.createdAt).toLocaleString("id-ID") : ""}
                             </span>
-                          )}
-                          {ord.customerAddress && (
-                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>
-                              {ord.customerAddress}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: "1rem" }}>
-                          {(ord.items || []).map((it, idx) => (
-                            <div key={idx} style={{ fontSize: "0.8125rem", color: "var(--text-main)" }}>
-                              {it.quantity}x {it.name}
-                            </div>
-                          ))}
-                          {ord.notes && (
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-                              Catatan: {ord.notes}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: "1rem", fontWeight: 700, color: "var(--text-forest)" }}>
-                          {formatRupiah(ord.totalPrice)}
-                        </td>
-                        <td style={{ padding: "1rem" }}>
-                          <select
-                            className="figma-input"
-                            style={{ padding: "0.4rem 0.65rem", fontSize: "0.8125rem", width: "auto" }}
-                            value={ord.status}
-                            onChange={(e) => handleChangeOrderStatus(ord.id, e.target.value)}
-                          >
-                            <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
-                            <option value="Diproses">Diproses</option>
-                            <option value="Selesai">Selesai</option>
-                            <option value="Dibatalkan">Dibatalkan</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td style={{ padding: "1rem" }}>
+                            <strong style={{ display: "block", color: "var(--text-main)" }}>{ord.customerName}</strong>
+                            {ord.customerPhone && (
+                              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block" }}>
+                                WA: {ord.customerPhone}
+                              </span>
+                            )}
+                            {ord.customerAddress && (
+                              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>
+                                {ord.customerAddress}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: "1rem" }}>
+                            {(ord.items || []).map((it, idx) => (
+                              <div key={idx} style={{ fontSize: "0.8125rem", color: "var(--text-main)" }}>
+                                {it.quantity}x {it.name}
+                              </div>
+                            ))}
+                            {ord.notes && (
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+                                Catatan: {ord.notes}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: "1rem", fontWeight: 700, color: "var(--text-forest)" }}>
+                            {formatRupiah(ord.totalPrice)}
+                          </td>
+                          <td style={{ padding: "1rem" }}>
+                            <select
+                              className="figma-input"
+                              style={{ padding: "0.4rem 0.65rem", fontSize: "0.8125rem", width: "auto" }}
+                              value={ord.status}
+                              onChange={(e) => handleChangeOrderStatus(ord.id, e.target.value)}
+                            >
+                              <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
+                              <option value="Diproses">Diproses</option>
+                              <option value="Selesai">Selesai</option>
+                              <option value="Dibatalkan">Dibatalkan</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1252,13 +1474,37 @@ export function AdminDashboard({
 
                 <div className="form-field">
                   <label className="field-label">Password Admin Baru (Opsional)</label>
-                  <input
-                    type="password"
-                    className="figma-input"
-                    placeholder="Kosongkan jika tidak ingin mengubah password admin..."
-                    value={adminForm.newPassword}
-                    onChange={(e) => setAdminForm({ ...adminForm, newPassword: e.target.value })}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showAdminPassword ? "text" : "password"}
+                      className="figma-input"
+                      style={{ paddingRight: "2.6rem" }}
+                      placeholder="Kosongkan jika tidak ingin mengubah password admin..."
+                      value={adminForm.newPassword}
+                      onChange={(e) => setAdminForm({ ...adminForm, newPassword: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword((prev) => !prev)}
+                      aria-label={showAdminPassword ? "Sembunyikan password" : "Lihat password"}
+                      title={showAdminPassword ? "Sembunyikan password" : "Lihat password"}
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "2px",
+                      }}
+                    >
+                      {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
                     Minimal 6 karakter jika ingin mengganti password login Admin.
                   </span>
@@ -1353,13 +1599,37 @@ export function AdminDashboard({
 
               <div className="form-field">
                 <label className="field-label">Reset Password Baru (Opsional)</label>
-                <input
-                  type="text"
-                  className="figma-input"
-                  placeholder="Ketik password baru (min. 6 karakter) jika user lupa password..."
-                  value={userForm.newPassword}
-                  onChange={(e) => setUserForm({ ...userForm, newPassword: e.target.value })}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showUserResetPassword ? "text" : "password"}
+                    className="figma-input"
+                    style={{ paddingRight: "2.6rem" }}
+                    placeholder="Ketik password baru (min. 6 karakter) jika user lupa password..."
+                    value={userForm.newPassword}
+                    onChange={(e) => setUserForm({ ...userForm, newPassword: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowUserResetPassword((prev) => !prev)}
+                    aria-label={showUserResetPassword ? "Sembunyikan password" : "Lihat password"}
+                    title={showUserResetPassword ? "Sembunyikan password" : "Lihat password"}
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "2px",
+                    }}
+                  >
+                    {showUserResetPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.5rem" }}>

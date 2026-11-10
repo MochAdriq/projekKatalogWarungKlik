@@ -124,10 +124,10 @@ export const fetchProducts = async (params = {}) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error("Gagal mengambil data produk");
     const json = await res.json();
-    if (json.data && json.data.length > 0) {
+    if (Array.isArray(json.data)) {
       return json;
     }
-    return { success: true, data: FIGMA_DEFAULT_PRODUCTS };
+    return { success: true, data: [] };
   } catch (error) {
     return { success: true, data: FIGMA_DEFAULT_PRODUCTS };
   }
@@ -139,10 +139,10 @@ export const fetchCategories = async () => {
     const res = await fetch(`${API_BASE}/categories`);
     if (!res.ok) throw new Error("Gagal mengambil data kategori");
     const json = await res.json();
-    if (json.data && json.data.length > 0) {
+    if (Array.isArray(json.data)) {
       return json;
     }
-    return { success: true, data: FIGMA_DEFAULT_CATEGORIES };
+    return { success: true, data: [] };
   } catch (error) {
     return { success: true, data: FIGMA_DEFAULT_CATEGORIES };
   }
@@ -306,6 +306,19 @@ export const updateOrderStatus = async (orderId, status) => {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ status }),
+  });
+  return await res.json();
+};
+
+export const bulkUpdateOrderStatus = async (orderIds, status) => {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/auth/orders/bulk-status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ orderIds, status }),
   });
   return await res.json();
 };

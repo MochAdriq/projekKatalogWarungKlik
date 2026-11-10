@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Lock, X, User, LogOut, Check, Store } from "./Icons.jsx";
+import { Lock, X, User, LogOut, Check, Store, Eye, EyeOff } from "./Icons.jsx";
 import {
   loginAdmin,
   registerUser,
@@ -27,6 +27,8 @@ export function AdminLoginModal({
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   useEffect(() => {
     if (isOpen && currentUser) {
@@ -291,13 +293,37 @@ export function AdminLoginModal({
 
               <div className="form-field">
                 <label className="field-label">Ganti Password Baru (Opsional)</label>
-                <input
-                  type="password"
-                  className="figma-input"
-                  placeholder="Kosongkan jika tidak ingin ganti password..."
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    className="figma-input"
+                    style={{ paddingRight: "2.6rem" }}
+                    placeholder="Kosongkan jika tidak ingin ganti password..."
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((prev) => !prev)}
+                    aria-label={showNewPassword ? "Sembunyikan password" : "Lihat password"}
+                    title={showNewPassword ? "Sembunyikan password" : "Lihat password"}
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "2px",
+                    }}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", marginTop: "0.5rem" }}>
@@ -579,15 +605,39 @@ export function AdminLoginModal({
                         </button>
                       )}
                     </div>
-                    <input
-                      id="auth-password"
-                      type="password"
-                      required
-                      className="figma-input"
-                      placeholder="Minimal 6 karakter"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="auth-password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        className="figma-input"
+                        style={{ paddingRight: "2.6rem" }}
+                        placeholder="Minimal 6 karakter"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
+                        title={showPassword ? "Sembunyikan password" : "Lihat password"}
+                        style={{
+                          position: "absolute",
+                          right: "0.75rem",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          color: "var(--text-muted)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "2px",
+                        }}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
 
                   <button

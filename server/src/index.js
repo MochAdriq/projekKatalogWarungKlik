@@ -17,6 +17,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 5000;
+// Default hanya menerima koneksi dari dalam server (Nginx). Ubah HOST di .env hanya jika memang perlu.
+const host = process.env.HOST || "127.0.0.1";
+
+// Di belakang Nginx: pakai IP asli klien dari X-Forwarded-For (untuk pembatas laju).
+app.set("trust proxy", 1);
 
 app.use(
   cors({
@@ -50,9 +55,16 @@ if (fs.existsSync(legacyUploadPath)) {
   }
 }
 
-app.use("/uploads", express.static(uploadPath));
+const staticUploadOptions = {
+  setHeaders: (res) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
+  },
+};
+
+app.use("/uploads", express.static(uploadPath, staticUploadOptions));
 if (fs.existsSync(legacyUploadPath)) {
-  app.use("/uploads", express.static(legacyUploadPath));
+  app.use("/uploads", express.static(legacyUploadPath, staticUploadOptions));
 }
 
 app.use("/api/auth", authRoutes);
@@ -90,8 +102,8 @@ const startServer = async () => {
     console.error("Gagal inisialisasi DB saat start:", err.message);
   }
 
-  app.listen(port, () => {
-    console.log(`Server WarungKlik is running on http://localhost:${port}`);
+  app.listen(port, host, () => {
+    console.log(`Server WarungKlik is running on http://${host}:${port}`);
   });
 };
 

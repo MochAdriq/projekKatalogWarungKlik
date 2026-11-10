@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./App.css";
 
 // Components
@@ -22,6 +22,7 @@ import {
   Trash2,
   X,
   User,
+  Check,
 } from "./components/Icons.jsx";
 
 // API Services
@@ -64,6 +65,10 @@ export function App() {
   const [bagCustomerAddress, setBagCustomerAddress] = useState("");
   const [bagNotes, setBagNotes] = useState("");
   const [isCheckingOutBag, setIsCheckingOutBag] = useState(false);
+  const [bagError, setBagError] = useState("");
+  const [bagToast, setBagToast] = useState(null);
+  const bagToastTimerRef = useRef(null);
+  const [myOrderStatusFilter, setMyOrderStatusFilter] = useState("ALL");
 
   // Admin / User auth states
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
@@ -155,6 +160,15 @@ export function App() {
     setIsAdminView(false);
     setFavorites([]);
     setMyOrders([]);
+    setBagItems([]);
+    setBagCustomerName("");
+    setBagCustomerPhone("");
+    setBagCustomerAddress("");
+    try {
+      localStorage.removeItem("warungklik_bag");
+    } catch {
+      // ignore
+    }
     setActiveNavTab("explore");
   };
 
@@ -200,6 +214,18 @@ export function App() {
         },
       ];
     });
+
+    if (bagToastTimerRef.current) {
+      clearTimeout(bagToastTimerRef.current);
+    }
+    setBagToast({
+      name: product.name,
+      qty,
+      ts: Date.now(),
+    });
+    bagToastTimerRef.current = setTimeout(() => {
+      setBagToast(null);
+    }, 3600);
   };
 
   const handleUpdateBagQty = (productId, delta) => {
@@ -223,31 +249,53 @@ export function App() {
   const handleBagCheckout = async (e) => {
     e.preventDefault();
     if (bagItems.length === 0) return;
+    setBagError("");
     setIsCheckingOutBag(true);
     try {
       const customerName = bagCustomerName.trim() || adminUser?.name || "Pelanggan WarungKlik";
       const customerPhone = bagCustomerPhone.trim() || adminUser?.phone || "";
       const customerAddress = bagCustomerAddress.trim() || adminUser?.address || "";
 
-      const orderRes = await createOrder({
-        customerName,
-        customerPhone,
-        customerAddress,
-        items: bagItems,
-        totalPrice: totalBagPrice,
-        notes: bagNotes.trim(),
-      });
+      // Klien hanya mengirim productId + quantity; harga & total dihitung server.
+      let orderRes;
+      try {
+        orderRes = await createOrder({
+          customerName,
+          customerPhone,
+          customerAddress,
+          items: bagItems.map((it) => ({ productId: it.productId, quantity: it.quantity })),
+          notes: bagNotes.trim(),
+        });
+      } catch {
+        setBagError("Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.");
+        return;
+      }
 
-      const orderId = orderRes?.data?.id || "";
+      if (!orderRes?.success || !orderRes?.data) {
+        setBagError(orderRes?.message || "Pesanan gagal dicatat. Silakan coba lagi.");
+        return;
+      }
+
+      const savedOrder = orderRes.data;
+      const orderId = savedOrder.id || "";
+      const confirmedItems = savedOrder.items || [];
+      const confirmedTotal = savedOrder.totalPrice ?? totalBagPrice;
       await loadUserAccountData();
 
-      const phone = storeSetting?.phone || "0895338977816";
+      const phone = storeSetting?.phone || "";
       let cleanPhone = phone.replace(/[^0-9]/g, "");
       if (cleanPhone.startsWith("0")) {
         cleanPhone = "62" + cleanPhone.slice(1);
       }
 
-      const itemsListText = bagItems
+      if (!cleanPhone) {
+        setBagItems([]);
+        setBagNotes("");
+        setBagError("Nomor WhatsApp toko belum diatur. Pesanan Anda sudah tercatat, silakan hubungi toko langsung.");
+        return;
+      }
+
+      const itemsListText = confirmedItems
         .map((it) => `- ${it.name} (${it.quantity}x) = ${formatRupiah(it.price * it.quantity)}`)
         .join("\n");
 
@@ -256,7 +304,7 @@ export function App() {
       }:
 ${itemsListText}
 
-Total Pembayaran: ${formatRupiah(totalBagPrice)}
+Total Pembayaran: ${formatRupiah(confirmedTotal)}
 Nama Pemesan: ${customerName}
 ${customerPhone ? `No. WA: ${customerPhone}\n` : ""}${
         customerAddress ? `Alamat: ${customerAddress}\n` : ""
@@ -266,7 +314,11 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
       setBagItems([]);
       setBagNotes("");
       setIsBagModalOpen(false);
-      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+      const win = window.open(waUrl, "_blank");
+      if (!win) {
+        window.location.href = waUrl;
+      }
     } finally {
       setIsCheckingOutBag(false);
     }
@@ -477,7 +529,44 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", margin: "1.25rem 0 3rem" }}>
-                      {myOrders.map((ord) => {
+                      <div className="category-chips-group" style={{ marginBottom: "0.25rem" }}>
+                        {[
+                          { value: "ALL", label: `Semua (${myOrders.length})` },
+                          {
+                            value: "Menunggu Konfirmasi",
+                            label: `Menunggu Konfirmasi (${myOrders.filter((o) => o.status === "Menunggu Konfirmasi").length})`,
+                          },
+                          {
+                            value: "Diproses",
+                            label: `Diproses (${myOrders.filter((o) => o.status === "Diproses").length})`,
+                          },
+                          {
+                            value: "Selesai",
+                            label: `Selesai (${myOrders.filter((o) => o.status === "Selesai").length})`,
+                          },
+                          {
+                            value: "Dibatalkan",
+                            label: `Dibatalkan (${myOrders.filter((o) => o.status === "Dibatalkan").length})`,
+                          },
+                        ].map((tab) => (
+                          <button
+                            key={tab.value}
+                            type="button"
+                            className={`category-chip-btn ${myOrderStatusFilter === tab.value ? "active" : ""}`}
+                            style={{ padding: "0.45rem 0.95rem", fontSize: "0.8125rem" }}
+                            onClick={() => setMyOrderStatusFilter(tab.value)}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {myOrders
+                        .filter(
+                          (ord) =>
+                            myOrderStatusFilter === "ALL" || ord.status === myOrderStatusFilter
+                        )
+                        .map((ord) => {
                         const isDone = ord.status === "Selesai";
                         const isCancelled = ord.status === "Dibatalkan";
                         return (
@@ -716,6 +805,98 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
             />
           )}
 
+          {/* Floating Toast Notification when item added to My Bag */}
+          {bagToast && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                position: "fixed",
+                bottom: "1.5rem",
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 80,
+                backgroundColor: "var(--text-forest)",
+                color: "#ffffff",
+                padding: "0.85rem 1.15rem",
+                borderRadius: "var(--radius-input)",
+                boxShadow: "0 16px 40px rgba(32, 36, 44, 0.28)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                maxWidth: "92vw",
+                width: "460px",
+                animation: "fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", minWidth: 0 }}>
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    backgroundColor: "var(--primary)",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Check size={15} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {bagToast.qty}x {bagToast.name} masuk keranjang
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "rgba(255, 255, 255, 0.75)" }}>
+                    Total di My Bag: {totalBagCount} porsi ({formatRupiah(totalBagPrice)})
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBagToast(null);
+                    setIsBagModalOpen(true);
+                  }}
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "0.45rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Lihat My Bag
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBagToast(null)}
+                  aria-label="Tutup notifikasi"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "rgba(255, 255, 255, 0.7)",
+                    cursor: "pointer",
+                    padding: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 4B. My Bag (Shopping Cart) Modal */}
           {isBagModalOpen && (
             <div
@@ -885,6 +1066,22 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                       <span>Total Pembayaran ({totalBagCount} porsi)</span>
                       <strong>{formatRupiah(totalBagPrice)}</strong>
                     </div>
+
+                    {bagError && (
+                      <div
+                        role="alert"
+                        style={{
+                          padding: "0.7rem 0.9rem",
+                          backgroundColor: "var(--danger-bg)",
+                          border: "1px solid #fecaca",
+                          color: "var(--danger)",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: "0.8125rem",
+                        }}
+                      >
+                        {bagError}
+                      </div>
+                    )}
 
                     <button type="submit" className="btn-whatsapp-order" disabled={isCheckingOutBag}>
                       <ShoppingBag size={18} />

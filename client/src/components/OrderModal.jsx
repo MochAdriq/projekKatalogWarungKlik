@@ -16,6 +16,7 @@ export function OrderModal({
   const [customerAddress, setCustomerAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [isOrdering, setIsOrdering] = useState(false);
+  const [orderError, setOrderError] = useState("");
 
   useEffect(() => {
     if (currentUser) {
@@ -40,41 +41,53 @@ export function OrderModal({
 
   const handleSendToWhatsApp = async (e) => {
     e.preventDefault();
+    setOrderError("");
     setIsOrdering(true);
 
     try {
+      // Klien hanya mengirim productId + quantity; harga & total dihitung server.
       const orderPayload = {
         customerName: customerName.trim() || currentUser?.name || "Pelanggan WarungKlik",
         customerPhone: customerPhone.trim() || currentUser?.phone || "",
         customerAddress: customerAddress.trim() || currentUser?.address || "",
-        items: [
-          {
-            productId: product.id || product._id,
-            name: product.name,
-            price: product.price,
-            quantity,
-            imageUrl: imageSrc,
-          },
-        ],
-        totalPrice,
+        items: [{ productId: product.id || product._id, quantity }],
         notes: notes.trim(),
       };
 
-      const orderRes = await createOrder(orderPayload);
-      const orderId = orderRes?.data?.id || "";
+      let orderRes;
+      try {
+        orderRes = await createOrder(orderPayload);
+      } catch {
+        setOrderError("Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.");
+        return;
+      }
+
+      if (!orderRes?.success || !orderRes?.data) {
+        setOrderError(orderRes?.message || "Pesanan gagal dicatat. Silakan coba lagi.");
+        return;
+      }
+
+      const savedOrder = orderRes.data;
+      const orderId = savedOrder.id || "";
+      const confirmedTotal = savedOrder.totalPrice ?? totalPrice;
 
       if (onOrderCreated) onOrderCreated();
 
-      const phone = storeSetting?.phone || "0895338977816";
+      const phone = storeSetting?.phone || "";
       let cleanPhone = phone.replace(/[^0-9]/g, "");
       if (cleanPhone.startsWith("0")) {
         cleanPhone = "62" + cleanPhone.slice(1);
       }
 
+      if (!cleanPhone) {
+        setOrderError("Nomor WhatsApp toko belum diatur. Pesanan Anda sudah tercatat, silakan hubungi toko langsung.");
+        return;
+      }
+
       const message = `Halo ${storeSetting?.storeName || "WarungKlik"}, saya ingin memesan${orderId ? ` (${orderId})` : ""}:
 - Menu: ${product.name}
 - Jumlah: ${quantity} porsi
-- Total: ${formatRupiah(totalPrice)}
+- Total: ${formatRupiah(confirmedTotal)}
 - Nama Pemesan: ${orderPayload.customerName}
 ${orderPayload.customerPhone ? `- No. WA: ${orderPayload.customerPhone}` : ""}
 ${orderPayload.customerAddress ? `- Alamat: ${orderPayload.customerAddress}` : ""}
@@ -83,7 +96,10 @@ ${notes ? `- Catatan: ${notes}` : ""}
 Mohon konfirmasi pesanan saya. Terima kasih!`;
 
       const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-      window.open(waUrl, "_blank");
+      const win = window.open(waUrl, "_blank");
+      if (!win) {
+        window.location.href = waUrl;
+      }
       onClose();
     } finally {
       setIsOrdering(false);
@@ -93,7 +109,7 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
   return (
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="order-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Left Column: Food Photography & Description */}
+        {/* Top Landscape Food Photography */}
         <div className="order-modal-media">
           {imageSrc ? (
             <img
@@ -103,7 +119,7 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                   : `/${imageSrc}`
               }
               alt={product.name}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
           ) : (
             <div
@@ -119,24 +135,38 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
               <ShoppingBag size={48} />
             </div>
           )}
+
+          <button
+            type="button"
+            className="order-modal-close-floating"
+            onClick={onClose}
+            aria-label="Tutup popup"
+            title="Tutup"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Right Column: Order Form (Figma: Order details) */}
+        {/* Bottom Section: Product Details & Order Form */}
         <div className="order-modal-form-col">
           <div>
             <div className="order-modal-header">
               <div>
                 <h3 className="order-modal-title">{product.name}</h3>
                 <p className="order-modal-subtitle">{formatRupiah(product.price)} / porsi</p>
+                {product.description && (
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-muted)",
+                      marginTop: "0.4rem",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {product.description}
+                  </p>
+                )}
               </div>
-              <button
-                type="button"
-                className="order-modal-close"
-                onClick={onClose}
-                aria-label="Tutup popup"
-              >
-                <X size={20} />
-              </button>
             </div>
 
             <form onSubmit={handleSendToWhatsApp} className="order-form-body">
@@ -212,6 +242,21 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {orderError && (
+                  <div
+                    role="alert"
+                    style={{
+                      padding: "0.7rem 0.9rem",
+                      backgroundColor: "var(--danger-bg)",
+                      border: "1px solid #fecaca",
+                      color: "var(--danger)",
+                      borderRadius: "var(--radius-sm)",
+                      fontSize: "0.8125rem",
+                    }}
+                  >
+                    {orderError}
+                  </div>
+                )}
                 {onAddToBag && (
                   <button
                     type="button"

@@ -1,6 +1,6 @@
 import express from "express";
 import { db } from "../db/db.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, requireAdmin, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({
@@ -49,7 +49,7 @@ router.post("/", authenticateToken, async (req, res) => {
   }
 });
 
-router.delete("/:id", authenticateToken, async (req, res) => {
+router.delete("/:id", authenticateToken, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -57,7 +57,7 @@ router.delete("/:id", authenticateToken, async (req, res) => {
     if (products.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Cannot delete category with existing products",
+        message: `Kategori tidak dapat dihapus karena masih digunakan oleh ${products.length} menu aktif. Pindahkan atau hapus menu tersebut terlebih dahulu.`,
       });
     }
 

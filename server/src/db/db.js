@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
@@ -325,7 +326,7 @@ class MysqlDatabase {
 
   async addProduct(data) {
     await this.ensureReady();
-    const id = `prod_${Date.now()}`;
+    const id = `prod_${crypto.randomUUID().slice(0, 8)}`;
     const name = data.name;
     const categoryId = data.categoryId;
     const price = Number(data.price) || 0;
@@ -371,6 +372,7 @@ class MysqlDatabase {
 
   async deleteProduct(id) {
     await this.ensureReady();
+    await this.pool.query("DELETE FROM favorites WHERE product_id = ?", [id]);
     const [result] = await this.pool.query("DELETE FROM products WHERE id = ?", [id]);
     return result.affectedRows > 0;
   }
@@ -385,7 +387,7 @@ class MysqlDatabase {
   async addCategory(name) {
     await this.ensureReady();
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const id = `cat_${Date.now()}`;
+    const id = `cat_${crypto.randomUUID().slice(0, 8)}`;
     await this.pool.query("INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)", [id, name, slug]);
     return { id, _id: id, name, slug };
   }
@@ -497,7 +499,7 @@ class MysqlDatabase {
 
   async createUser({ name, email, password, phone = "", address = "", role = "customer" }) {
     await this.ensureReady();
-    const id = `user_${Date.now()}`;
+    const id = `user_${crypto.randomUUID().slice(0, 8)}`;
     const hashedPassword = bcrypt.hashSync(password, 10);
     await this.pool.query(
       "INSERT INTO users (id, name, email, password, phone, address, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -532,7 +534,7 @@ class MysqlDatabase {
   async updateAdminProfile(id, { name, email, newPassword }) {
     await this.ensureReady();
     const [rows] = await this.pool.query("SELECT id, name, email, password FROM admins WHERE id = ? LIMIT 1", [id]);
-    const admin = rows[0] || (await this.getAdmin());
+    const admin = rows[0];
     if (!admin) return null;
 
     const targetId = admin.id;
@@ -643,7 +645,8 @@ class MysqlDatabase {
     notes = "",
   }) {
     await this.ensureReady();
-    const id = `ORD-${Date.now().toString().slice(-6)}`;
+    const randSuffix = crypto.randomBytes(2).toString("hex").toUpperCase();
+    const id = `ORD-${Date.now().toString().slice(-4)}${randSuffix}`;
     const itemsJson = JSON.stringify(items);
     await this.pool.query(
       `INSERT INTO orders (id, user_id, customer_name, customer_phone, customer_address, items_json, total_price, notes, status)
@@ -702,6 +705,17 @@ class MysqlDatabase {
     await this.ensureReady();
     await this.pool.query("UPDATE orders SET status = ? WHERE id = ?", [status, id]);
     return await this.getOrderById(id);
+  }
+
+  async bulkUpdateOrderStatus(ids = [], status) {
+    await this.ensureReady();
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const placeholders = ids.map(() => "?").join(", ");
+    const [result] = await this.pool.query(
+      `UPDATE orders SET status = ? WHERE id IN (${placeholders})`,
+      [status, ...ids]
+    );
+    return result.affectedRows || 0;
   }
 }
 

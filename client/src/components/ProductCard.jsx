@@ -1,5 +1,5 @@
-import React from "react";
-import { Plus, ShoppingBag, Heart, X } from "./Icons.jsx";
+import React, { useState } from "react";
+import { Plus, ShoppingBag, Heart, X, Check } from "./Icons.jsx";
 
 export function ProductCard({
   product,
@@ -8,6 +8,8 @@ export function ProductCard({
   isFavorite = false,
   onToggleFavorite,
 }) {
+  const [justAdded, setJustAdded] = useState(false);
+
   const isOutOfStock =
     product.stockStatus === "out_of_stock" ||
     product.stockStatus === "Habis" ||
@@ -116,18 +118,25 @@ export function ProductCard({
             <button
               type="button"
               className="add-to-bag-btn"
+              style={
+                justAdded
+                  ? { backgroundColor: "var(--success)", transform: "scale(1.06)" }
+                  : undefined
+              }
               onClick={() => {
                 if (onAddToBag) {
                   onAddToBag(product);
+                  setJustAdded(true);
+                  setTimeout(() => setJustAdded(false), 1200);
                 } else if (onSelectProduct) {
                   onSelectProduct(product);
                 }
               }}
               disabled={isOutOfStock}
-              title={isOutOfStock ? "Menu Habis" : "Tambah ke My Bag"}
+              title={isOutOfStock ? "Menu Habis" : justAdded ? "Berhasil masuk My Bag" : "Tambah ke My Bag"}
               aria-label={`Tambah ${product.name} ke keranjang`}
             >
-              {isOutOfStock ? <X size={15} /> : <Plus size={18} />}
+              {isOutOfStock ? <X size={15} /> : justAdded ? <Check size={18} /> : <Plus size={18} />}
             </button>
           </div>
         </div>

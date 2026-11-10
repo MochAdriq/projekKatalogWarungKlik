@@ -1,6 +1,6 @@
 import express from "express";
 import { db } from "../db/db.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.put("/", authenticateToken, async (req, res) => {
+router.put("/", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { storeName, tagline, address, phone, slug, currency, activeWhatsApp } = req.body;
     const current = await db.getStoreSettings();
